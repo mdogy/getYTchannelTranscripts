@@ -10,24 +10,62 @@ def prompt_channel_url():
     return input('Enter YouTube channel URL: ').strip()
 
 def get_channel_video_ids(channel_url):
+    # Clean up the URL
+    channel_url = channel_url.strip()
+    
+    # Handle different URL formats
+    if '/channel/' in channel_url:
+        channel_id = channel_url.split('/channel/')[-1].split('/')[0]
+        channel_url = f'https://www.youtube.com/channel/{channel_id}/videos'
+    elif '/c/' in channel_url:
+        channel_url = channel_url.replace('/c/', '/channel/') + '/videos'
+    elif '/@' in channel_url:
+        # For @handles, we need to use a different approach
+        ydl_opts = {
+            'quiet': True,
+            'extract_flat': True,
+            'force_generic_extractor': True,
+            'extract_flat_playlist': True,
+            'playlist_items': 'all'
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(channel_url, download=False)
+                if info and 'entries' in info:
+                    return info
+            except Exception as e:
+                print(f"Error with handle URL: {str(e)}")
+                # Try alternative URL format
+                channel_url = channel_url.replace('/@', '/channel/') + '/videos'
+    else:
+        # Assume it's a channel ID
+        channel_url = f'https://www.youtube.com/channel/{channel_url}/videos'
+
+    # Now get all videos from the channel
     ydl_opts = {
         'extract_flat': True,
         'skip_download': True,
         'quiet': True,
-        'forcejson': True,
-        'dump_single_json': True,
+        'extract_flat_playlist': True,
+        'playlist_items': 'all',
+        'ignoreerrors': True
     }
+    
+    print(f"Attempting to extract videos from: {channel_url}")
+    
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(channel_url, download=False)
-    return info
-
-def get_video_metadata(video_url):
-    ydl_opts = {
-        'quiet': True,
-        'skip_download': True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        return ydl.extract_info(video_url, download=False)
+        try:
+            info = ydl.extract_info(channel_url, download=False)
+            if not info:
+                print("No channel information found")
+                return None
+            if 'entries' not in info:
+                print("No video entries found in channel")
+                return None
+            return info
+        except Exception as e:
+            print(f"Error extracting channel info: {str(e)}")
+            return None
 
 def parse_upload_date(upload_date_str):
     return datetime.strptime(upload_date_str, '%Y%m%d').date()
@@ -81,25 +119,27 @@ def main():
         sys.stderr = log_file
 
     info = get_channel_video_ids(channel_url)
+    if not info:
+        print("Failed to get channel information")
+        sys.exit(1)
+
     channel_name = info.get('title', '')
     entries = info.get('entries', [])
     print(f"Found {len(entries)} entries in channel playlist.")
+    
     rows = []
     for entry in entries:
-        if entry.get('ie_key') != 'Youtube' or not entry.get('id'):
-            print(f"Skipping non-video entry: {entry.get('title', 'No title')}")
+        if not entry or not entry.get('id'):
             continue
+            
         video_id = entry.get('id', '')
         video_url = f'https://www.youtube.com/watch?v={video_id}'
-        try:
-            video_info = get_video_metadata(video_url)
-        except Exception as e:
-            print(f"Failed to get info for {video_url}: {e}")
-            continue
-        upload_date_str = video_info.get('upload_date')
+        upload_date_str = entry.get('upload_date')
+        
         if not upload_date_str:
             print(f"No upload_date for {video_url}, skipping.")
             continue
+            
         upload_date = parse_upload_date(upload_date_str)
         if start_date and upload_date < start_date:
             print(f"{video_url} upload date {upload_date} before start date {start_date}, skipping.")
@@ -107,15 +147,17 @@ def main():
         if end_date and upload_date > end_date:
             print(f"{video_url} upload date {upload_date} after end date {end_date}, skipping.")
             continue
-        title = video_info.get('title', '')
-        duration = video_info.get('duration')
+            
+        title = entry.get('title', '')
+        duration = entry.get('duration')
         if duration is not None:
-            hours = duration // 3600
-            minutes = (duration % 3600) // 60
-            seconds = duration % 60
+            hours = int(duration) // 3600
+            minutes = (int(duration) % 3600) // 60
+            seconds = int(duration) % 60
             length_str = f"{hours}:{minutes:02}:{seconds:02}"
         else:
             length_str = ''
+            
         print(f"Adding video: {title} ({video_url})")
         rows.append([
             video_id,
@@ -123,20 +165,25 @@ def main():
             channel_url,
             video_url,
             title,
-            length_str
+            length_str,
+            upload_date_str
         ])
+
     output_dir = 'output'
     os.makedirs(output_dir, exist_ok=True)
     safe_channel_name = re.sub(r'\W+', '_', channel_name) or 'channel'
     csv_filename = get_unique_csv_filename(safe_channel_name + '_videos', output_dir)
+    
     df = pd.DataFrame(rows, columns=[
         'video_id',
         'channel_name',
         'channel_url',
         'video_url',
         'title',
-        'length'
+        'length',
+        'upload_date'
     ])
+    
     df.to_csv(csv_filename, index=False)
     print(f"CSV file written: {csv_filename}")
     if not rows:
