@@ -1,12 +1,11 @@
 import pytest
 import logging
 import os
-from datetime import datetime, date
+from datetime import date
 from unittest.mock import Mock, patch
-import yt_dlp
-import pandas as pd
 import sys
-from io import StringIO
+from typing import Dict, Any, Generator
+import shutil
 
 # Import the functions we want to test
 from channel_videos_to_csv import (
@@ -14,30 +13,47 @@ from channel_videos_to_csv import (
     get_video_details,
     parse_upload_date,
     get_unique_csv_filename,
+    main,
 )
 
-# Configure logging for tests
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("output/test.log"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
 
-logger = logging.getLogger(__name__)
+@pytest.fixture(autouse=True)
+def setup_logging():
+    """Setup logging for tests."""
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("output/test.log"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+    yield
+    # Cleanup logging handlers
+    for handler in logging.getLogger().handlers[:]:
+        handler.close()
+        logging.getLogger().removeHandler(handler)
 
 
 @pytest.fixture
-def mock_ytdl():
+def temp_output_dir(tmp_path):
+    """Create a temporary output directory for tests."""
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    yield output_dir
+    # Cleanup
+    shutil.rmtree(output_dir)
+
+
+@pytest.fixture
+def mock_ytdl() -> Generator[Mock, None, None]:
     """Fixture to provide a mocked yt-dlp instance."""
     with patch("yt_dlp.YoutubeDL") as mock:
         yield mock
 
 
 @pytest.fixture
-def sample_channel_info():
+def sample_channel_info() -> Dict[str, Any]:
     """Fixture to provide sample channel information."""
     return {
         "title": "Test Channel",
@@ -70,7 +86,9 @@ def sample_channel_info():
     }
 
 
-def test_get_channel_video_info(mock_ytdl, sample_channel_info):
+def test_get_channel_video_info(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
+) -> None:
     """Test getting channel video information."""
     # Setup mock
     mock_instance = Mock()
@@ -87,10 +105,16 @@ def test_get_channel_video_info(mock_ytdl, sample_channel_info):
     for url in test_urls:
         result = get_channel_video_info(url)
         assert result == sample_channel_info
-        mock_instance.extract_info.assert_called_with(url, download=False)
+        # The URL should be converted to channel format for /c/ URLs
+        expected_url = (
+            url.replace("/c/", "/channel/") if "/c/" in url else url
+        )
+        mock_instance.extract_info.assert_called_with(
+            expected_url, download=False
+        )
 
 
-def test_get_channel_video_info_error(mock_ytdl):
+def test_get_channel_video_info_error(mock_ytdl: Mock) -> None:
     """Test error handling in get_channel_video_info."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
@@ -100,7 +124,7 @@ def test_get_channel_video_info_error(mock_ytdl):
     assert result is None
 
 
-def test_get_video_details(mock_ytdl):
+def test_get_video_details(mock_ytdl: Mock) -> None:
     """Test getting video details."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
@@ -116,7 +140,7 @@ def test_get_video_details(mock_ytdl):
     assert result["upload_date"] == "20230101"
 
 
-def test_parse_upload_date():
+def test_parse_upload_date() -> None:
     """Test parsing upload date."""
     date_str = "20230101"
     result = parse_upload_date(date_str)
@@ -126,7 +150,7 @@ def test_parse_upload_date():
     assert result.day == 1
 
 
-def test_get_unique_csv_filename(tmp_path):
+def test_get_unique_csv_filename(tmp_path: Any) -> None:
     """Test generating unique CSV filenames."""
     # Create a temporary directory for testing
     os.makedirs(tmp_path / "output", exist_ok=True)
@@ -143,7 +167,9 @@ def test_get_unique_csv_filename(tmp_path):
     assert filename == str(tmp_path / "output" / "test_1.csv")
 
 
-def test_youtube_dl_output_format(mock_ytdl, sample_channel_info):
+def test_youtube_dl_output_format(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
+) -> None:
     """Test that yt-dlp produces expected output format."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
@@ -168,3 +194,159 @@ def test_youtube_dl_output_format(mock_ytdl, sample_channel_info):
         assert "description" in entry
         assert "webpage_url" in entry
         assert "automatic_captions" in entry
+
+
+def test_main_with_channel_url(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
+    """Test main function with channel URL argument."""
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = sample_channel_info
+
+    # Test with channel URL
+    with patch(
+        "sys.argv",
+        ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+    ):
+        with patch("os.makedirs") as mock_makedirs:
+            with patch("pandas.DataFrame.to_csv") as mock_to_csv:
+                main()
+                mock_makedirs.assert_called_once()
+                mock_to_csv.assert_called_once()
+
+
+def test_main_with_date_filters(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
+    """Test main function with date filters."""
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = sample_channel_info
+
+    # Test with date filters
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel", "https://youtube.com/channel/UC123",
+            "--start-date", "2023-01-01",
+            "--end-date", "2023-01-02",
+        ],
+    ):
+        with patch("os.makedirs") as mock_makedirs:
+            with patch("pandas.DataFrame.to_csv") as mock_to_csv:
+                main()
+                mock_makedirs.assert_called_once()
+                mock_to_csv.assert_called_once()
+
+
+def test_main_with_invalid_date(mock_ytdl: Mock) -> None:
+    """Test main function with invalid date format."""
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel", "https://youtube.com/channel/UC123",
+            "--start-date", "invalid-date",
+        ],
+    ):
+        with patch("sys.exit") as mock_exit:
+            main()
+            mock_exit.assert_called_once_with(1)
+
+
+def test_main_with_log_file(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
+    """Test main function with log file output."""
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = sample_channel_info
+
+    log_file = temp_output_dir / "test.log"
+
+    # Test with log file
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel", "https://youtube.com/channel/UC123",
+            "--log", str(log_file),
+        ],
+    ):
+        with patch("os.makedirs") as mock_makedirs:
+            with patch("pandas.DataFrame.to_csv") as mock_to_csv:
+                main()
+                mock_makedirs.assert_called_once()
+                mock_to_csv.assert_called_once()
+                assert log_file.exists()
+
+
+def test_main_with_no_channel_info(mock_ytdl: Mock, temp_output_dir) -> None:
+    """Test main function when no channel info is returned."""
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = None
+
+    # Test with no channel info
+    with patch(
+        "sys.argv",
+        ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+    ):
+        with patch("sys.exit") as mock_exit:
+            main()
+            mock_exit.assert_called_once_with(1)
+
+
+def test_main_with_invalid_entries(mock_ytdl: Mock, temp_output_dir) -> None:
+    """Test main function with invalid entries in channel info."""
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = {
+        "title": "Test Channel",
+        "entries": None  # Invalid entries
+    }
+
+    # Test with invalid entries
+    with patch(
+        "sys.argv",
+        ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+    ):
+        with patch("sys.exit") as mock_exit:
+            main()
+            mock_exit.assert_called_once_with(1)
+
+
+def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
+    """Test main function with missing video data."""
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = {
+        "title": "Test Channel",
+        "entries": [
+            {
+                "_type": "video",
+                "id": "video1",
+                # Missing upload_date to test skipping
+            }
+        ]
+    }
+
+    # Test with missing video data
+    with patch(
+        "sys.argv",
+        ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+    ):
+        with patch("os.makedirs") as mock_makedirs:
+            with patch("pandas.DataFrame") as mock_df:
+                mock_df_instance = Mock()
+                mock_df.return_value = mock_df_instance
+                main()
+                mock_makedirs.assert_called_once()
+                mock_df.assert_called_once()
+                # The DataFrame should be created with an empty list of rows
+                args, kwargs = mock_df.call_args
+                rows_arg = args[0]
+                assert isinstance(rows_arg, list)
+                assert len(rows_arg) == 0
