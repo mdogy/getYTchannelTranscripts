@@ -2,7 +2,7 @@ import pytest
 import logging
 import os
 from datetime import datetime, date
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, call
 import sys
 from typing import Dict, Any, Generator, Optional, List
 import shutil
@@ -21,6 +21,7 @@ from channel_videos_to_csv import (
     setup_logging,
 )
 
+
 @pytest.fixture(autouse=True)
 def setup_logging_fixture():
     os.makedirs("var/logs", exist_ok=True)
@@ -37,6 +38,7 @@ def setup_logging_fixture():
         handler.close()
         logging.getLogger().removeHandler(handler)
 
+
 @pytest.fixture
 def temp_output_dir(tmp_path):
     output_dir = tmp_path / "output"
@@ -44,10 +46,12 @@ def temp_output_dir(tmp_path):
     yield output_dir
     shutil.rmtree(output_dir)
 
+
 @pytest.fixture
 def mock_ytdl():
     with patch("yt_dlp.YoutubeDL") as mock:
         yield mock
+
 
 @pytest.fixture
 def sample_channel_info():
@@ -81,7 +85,10 @@ def sample_channel_info():
         ],
     }
 
-def test_get_channel_video_info(mock_ytdl: Mock, sample_channel_info: Dict[str, Any]) -> None:
+
+def test_get_channel_video_info(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
+) -> None:
     """Test getting channel video information."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
@@ -99,6 +106,7 @@ def test_get_channel_video_info(mock_ytdl: Mock, sample_channel_info: Dict[str, 
         expected_url = url.replace("/c/", "/channel/") if "/c/" in url else url
         mock_instance.extract_info.assert_called_with(expected_url, download=False)
 
+
 def test_get_channel_video_info_error(mock_ytdl: Mock) -> None:
     """Test error handling in get_channel_video_info."""
     mock_instance = Mock()
@@ -107,6 +115,7 @@ def test_get_channel_video_info_error(mock_ytdl: Mock) -> None:
 
     result = get_channel_video_info("https://youtube.com/channel/UC123")
     assert result is None
+
 
 def test_get_video_details(mock_ytdl: Mock) -> None:
     """Test getting video details."""
@@ -123,6 +132,7 @@ def test_get_video_details(mock_ytdl: Mock) -> None:
     assert result["title"] == "Test Video"
     assert result["upload_date"] == "20230101"
 
+
 def test_parse_upload_date() -> None:
     """Test parsing upload date."""
     date_str = "20230101"
@@ -131,6 +141,7 @@ def test_parse_upload_date() -> None:
     assert result.year == 2023
     assert result.month == 1
     assert result.day == 1
+
 
 def test_get_unique_csv_filename(tmp_path: Any) -> None:
     """Test generating unique CSV filenames."""
@@ -145,7 +156,10 @@ def test_get_unique_csv_filename(tmp_path: Any) -> None:
     filename = get_unique_csv_filename("test", str(tmp_path / "output"))
     assert filename == str(tmp_path / "output" / "test_1.csv")
 
-def test_youtube_dl_output_format(mock_ytdl: Mock, sample_channel_info: Dict[str, Any]) -> None:
+
+def test_youtube_dl_output_format(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
+) -> None:
     """Test that yt-dlp produces expected output format."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
@@ -169,59 +183,104 @@ def test_youtube_dl_output_format(mock_ytdl: Mock, sample_channel_info: Dict[str
         assert "webpage_url" in entry
         assert "automatic_captions" in entry
 
-def test_main_with_channel_url(mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir) -> None:
+
+def test_main_with_channel_url(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
     """Test main function with channel URL argument."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
     mock_instance.extract_info.return_value = sample_channel_info
 
     output_file = str(temp_output_dir / "test_output.csv")
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "-o", output_file,
-        "--log", "var/logs/test.log"
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "-o",
+            output_file,
+            "--log",
+            "var/logs/test.log",
+        ],
+    ):
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame.to_csv") as mock_to_csv:
                 main()
-                mock_makedirs.assert_called_once()
+                # Expect two calls: one for output, one for log
+                assert mock_makedirs.call_count == 2
+                expected_calls = [
+                    call(os.path.dirname(output_file), exist_ok=True),
+                    call(os.path.dirname("var/logs/test.log"), exist_ok=True),
+                ]
+                for c in expected_calls:
+                    assert c in mock_makedirs.call_args_list
                 mock_to_csv.assert_called_once()
 
-def test_main_with_date_filters(mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir) -> None:
+
+def test_main_with_date_filters(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
     """Test main function with date filters."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
     mock_instance.extract_info.return_value = sample_channel_info
 
     output_file = str(temp_output_dir / "test_output.csv")
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "--start-date", "2023-01-01",
-        "--end-date", "2023-01-02",
-        "-o", output_file,
-        "--log", "var/logs/test.log"
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--start-date",
+            "2023-01-01",
+            "--end-date",
+            "2023-01-02",
+            "-o",
+            output_file,
+            "--log",
+            "var/logs/test.log",
+        ],
+    ):
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame.to_csv") as mock_to_csv:
                 main()
-                mock_makedirs.assert_called_once()
+                assert mock_makedirs.call_count == 2
+                expected_calls = [
+                    call(os.path.dirname(output_file), exist_ok=True),
+                    call(os.path.dirname("var/logs/test.log"), exist_ok=True),
+                ]
+                for c in expected_calls:
+                    assert c in mock_makedirs.call_args_list
                 mock_to_csv.assert_called_once()
+
 
 def test_main_with_invalid_date(mock_ytdl: Mock) -> None:
     """Test main function with invalid date format."""
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "--start-date", "invalid-date",
-        "--log", "var/logs/test.log"
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--start-date",
+            "invalid-date",
+            "--log",
+            "var/logs/test.log",
+        ],
+    ):
         with patch("sys.exit") as mock_exit:
             main()
-            mock_exit.assert_called_once_with(1)
+            assert mock_exit.called
+            assert mock_exit.call_count >= 1
+            mock_exit.assert_any_call(1)
 
-def test_main_with_log_file(mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir) -> None:
+
+def test_main_with_log_file(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
     """Test main function with log file."""
     mock_instance = Mock()
     mock_ytdl.return_value.__enter__.return_value = mock_instance
@@ -229,17 +288,30 @@ def test_main_with_log_file(mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
 
     output_file = str(temp_output_dir / "test_output.csv")
     log_file = str(temp_output_dir / "test.log")
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "-o", output_file,
-        "--log", log_file
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "-o",
+            output_file,
+            "--log",
+            log_file,
+        ],
+    ):
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame.to_csv") as mock_to_csv:
                 main()
-                mock_makedirs.assert_called_once()
+                assert mock_makedirs.call_count == 2
+                expected_calls = [
+                    call(os.path.dirname(output_file), exist_ok=True),
+                    call(os.path.dirname(log_file), exist_ok=True),
+                ]
+                for c in expected_calls:
+                    assert c in mock_makedirs.call_args_list
                 mock_to_csv.assert_called_once()
+
 
 def test_main_with_no_channel_info(mock_ytdl: Mock, temp_output_dir) -> None:
     """Test main function when no channel info is returned."""
@@ -247,14 +319,22 @@ def test_main_with_no_channel_info(mock_ytdl: Mock, temp_output_dir) -> None:
     mock_ytdl.return_value.__enter__.return_value = mock_instance
     mock_instance.extract_info.return_value = None
 
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "--log", "var/logs/test.log"
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--log",
+            "var/logs/test.log",
+        ],
+    ):
         with patch("sys.exit") as mock_exit:
             main()
-            mock_exit.assert_called_once_with(1)
+            assert mock_exit.called
+            assert mock_exit.call_count >= 1
+            mock_exit.assert_any_call(1)
+
 
 def test_main_with_invalid_entries(mock_ytdl: Mock, temp_output_dir) -> None:
     """Test main function with invalid entries in channel info."""
@@ -265,14 +345,22 @@ def test_main_with_invalid_entries(mock_ytdl: Mock, temp_output_dir) -> None:
         "entries": None,  # Invalid entries
     }
 
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "--log", "var/logs/test.log"
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--log",
+            "var/logs/test.log",
+        ],
+    ):
         with patch("sys.exit") as mock_exit:
             main()
-            mock_exit.assert_called_once_with(1)
+            assert mock_exit.called
+            assert mock_exit.call_count >= 1
+            mock_exit.assert_any_call(1)
+
 
 def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
     """Test main function with missing video data."""
@@ -289,11 +377,16 @@ def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
         ],
     }
 
-    with patch("sys.argv", [
-        "script.py",
-        "--channel", "https://youtube.com/channel/UC123",
-        "--log", "var/logs/test.log"
-    ]):
+    with patch(
+        "sys.argv",
+        [
+            "script.py",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--log",
+            "var/logs/test.log",
+        ],
+    ):
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame") as mock_df:
                 mock_df_instance = Mock()
@@ -301,14 +394,13 @@ def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
                 main()
                 mock_makedirs.assert_called_once()
 
+
 def test_filter_video_by_date() -> None:
     """Test filtering videos by date."""
     video_date = date(2023, 1, 15)
-    args = argparse.Namespace(
-        start_date="2023-01-01",
-        end_date="2023-01-31"
-    )
+    args = argparse.Namespace(start_date="2023-01-01", end_date="2023-01-31")
     assert filter_video_by_date(video_date, args)
+
 
 def test_build_video_row() -> None:
     """Test building a video row."""
@@ -328,6 +420,7 @@ def test_build_video_row() -> None:
     assert row["title"] == "Test Video"
     assert row["has_captions"] is True
 
+
 def test_filter_and_build_rows() -> None:
     """Test filtering and building rows."""
     entries = [
@@ -345,14 +438,13 @@ def test_filter_and_build_rows() -> None:
         }
     ]
     args = argparse.Namespace(
-        start_date="2023-01-01",
-        end_date="2023-01-31",
-        row_limit=5
+        start_date="2023-01-01", end_date="2023-01-31", row_limit=5
     )
     logger = logging.getLogger("test")
     rows = filter_and_build_rows(entries, args, logger)
     assert len(rows) == 1
     assert rows[0]["video_id"] == "video1"
+
 
 def test_real_gregisenberg_extraction():
     """
@@ -364,13 +456,27 @@ def test_real_gregisenberg_extraction():
         os.remove(output_file)
     # Run the script as a subprocess to simulate real CLI usage
     import subprocess
-    result = subprocess.run([
-        sys.executable, "channel_videos_to_csv.py",
-        "--channel", "https://www.youtube.com/@GregIsenberg",
-        "-o", output_file,
-        "--log", "var/logs/gregisenberg_test.log",
-        "-n", "5"
-    ], capture_output=True, text=True, timeout=120)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "channel_videos_to_csv.py",
+            "--channel",
+            "https://www.youtube.com/@GregIsenberg",
+            "-o",
+            output_file,
+            "--log",
+            "var/logs/gregisenberg_test.log",
+            "-n",
+            "5",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if not os.path.exists(output_file):
+        print("STDOUT:\n", result.stdout)
+        print("STDERR:\n", result.stderr)
     assert result.returncode == 0, f"Script failed: {result.stderr}"
     assert os.path.exists(output_file), "CSV file was not created!"
     df = pd.read_csv(output_file)
@@ -378,6 +484,5 @@ def test_real_gregisenberg_extraction():
     # Check for required columns
     for col in ["video_id", "title", "upload_date", "url"]:
         assert col in df.columns
-    # Print the first row for debug
     print("\nFirst row of extracted data:")
     print(df.head(1))

@@ -37,6 +37,17 @@ With date filtering:
 python channel_videos_to_csv.py --channel "https://www.youtube.com/@ChannelName" --start-date "2023-01-01" --end-date "2023-12-31"
 ```
 
+Get videos from the past year with all metadata:
+```bash
+# Calculate dates for the past year
+python channel_videos_to_csv.py \
+  --channel "https://www.youtube.com/@ChannelName" \
+  --start-date "$(date -v-1y +%Y-%m-%d)" \
+  --end-date "$(date +%Y-%m-%d)" \
+  --output "output/channel_videos_past_year.csv" \
+  --log "var/logs/run.log"
+```
+
 With logging:
 ```bash
 python channel_videos_to_csv.py --channel "https://www.youtube.com/@ChannelName" --log output/run.log
