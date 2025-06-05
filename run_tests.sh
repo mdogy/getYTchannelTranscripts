@@ -11,9 +11,9 @@ flake8 . > var/logs/flake8.log 2>&1
 echo "Running black..."
 black . > var/logs/black.log 2>&1
 
-# Run mypy
+# Run mypy from within src directory
 echo "Running mypy..."
-mypy --explicit-package-bases src/youtube_transcripts > var/logs/mypy.log 2>&1
+(cd src && mypy --explicit-package-bases youtube_transcripts) > var/logs/mypy.log 2>&1
 
 # Run pytest
 echo "Running pytest..."
@@ -27,6 +27,6 @@ echo "mypy: $(grep -q "error" var/logs/mypy.log && echo "FAIL" || echo "PASS")"
 echo "pytest: $(grep -q "FAILED" var/logs/pytest.log && echo "FAIL" || echo "PASS")"
 
 # Exit with failure if any test failed
-if [ $(grep -q "error" var/logs/flake8.log) -ne 0 ] || [ $(grep -q "error" var/logs/black.log) -ne 0 ] || [ $(grep -q "error" var/logs/mypy.log) -ne 0 ] || [ $(grep -q "FAILED" var/logs/pytest.log) -ne 0 ]; then
+if grep -q "error" var/logs/flake8.log || grep -q "error" var/logs/black.log || grep -q "error" var/logs/mypy.log || grep -q "FAILED" var/logs/pytest.log; then
     exit 1
 fi 

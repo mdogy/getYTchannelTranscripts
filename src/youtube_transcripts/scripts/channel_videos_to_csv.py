@@ -8,7 +8,7 @@ import os
 import sys
 import argparse
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 
 from youtube_transcripts.core.video_metadata import (
     get_video_details,
@@ -82,7 +82,7 @@ def get_channel_video_info(channel_url: str) -> Optional[Dict[str, Any]]:
                 logger.info(f"First entry keys: {first_entry.keys()}")
                 logger.info(f"First entry data: {first_entry}")
 
-            return info
+            return dict(info)  # Convert to dict to ensure type safety
 
     except Exception as e:
         logger.error(f"Error extracting channel info: {str(e)}")
@@ -112,7 +112,9 @@ def filter_video_by_date(video_date: date, args: argparse.Namespace) -> bool:
     return True
 
 
-def filter_and_build_rows(entries, channel_info):
+def filter_and_build_rows(
+    entries: List[Dict[str, Any]], channel_info: Dict[str, Any]
+) -> List[Dict[str, Any]]:
     """Filter entries and build rows for CSV output."""
     logger.info(f"Starting to process {len(entries)} entries")
     rows = []

@@ -1,7 +1,7 @@
 """Core functionality for extracting and formatting YouTube video transcripts."""
 
 import yt_dlp  # type: ignore
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Union
 import logging
 from datetime import timedelta
 
@@ -42,7 +42,14 @@ def extract_transcript(video_url: str) -> Optional[List[Dict[str, Any]]]:
             # Get the first available caption format
             caption_data = captions[0]
             if "data" in caption_data:
-                return caption_data["data"]
+                # Ensure we return a list of dicts
+                data = caption_data["data"]
+                if isinstance(data, list) and all(
+                    isinstance(item, dict) for item in data
+                ):
+                    return data
+                logger.error("Invalid caption data format")
+                return None
             else:
                 logger.error("No caption data found in format")
                 return None

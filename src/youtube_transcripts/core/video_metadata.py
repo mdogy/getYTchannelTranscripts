@@ -2,7 +2,7 @@
 
 import yt_dlp  # type: ignore
 from datetime import datetime, date
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 import logging
 import argparse
 
@@ -28,13 +28,15 @@ def get_video_details(video_url: str) -> Optional[Dict[str, Any]]:
     try:
         with yt_dlp.YoutubeDL(video_ydl_opts) as video_ydl:
             video_details = video_ydl.extract_info(video_url, download=False)
-        return video_details
+            if video_details is None:
+                return None
+            return dict(video_details)  # Convert to dict to ensure type safety
     except Exception as e:
         logger.error(f"Error extracting details for {video_url}: {e}")
         return None
 
 
-def parse_upload_date(upload_date_val) -> date:
+def parse_upload_date(upload_date_val: Union[str, int]) -> date:
     """Parses upload date from YYYYMMDD string or Unix timestamp to date object."""
     if isinstance(upload_date_val, int):
         # Assume it's a Unix timestamp
@@ -200,7 +202,7 @@ def get_channel_video_info(channel_url: str) -> Optional[Dict[str, Any]]:
                 logger.info(f"First entry keys: {first_entry.keys()}")
                 logger.info(f"First entry data: {first_entry}")
 
-            return info
+            return dict(info)  # Convert to dict to ensure type safety
 
     except Exception as e:
         logger.error(f"Error extracting channel info: {str(e)}")
