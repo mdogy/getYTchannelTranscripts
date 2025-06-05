@@ -13,7 +13,7 @@ black . > var/logs/black.log 2>&1
 
 # Run mypy
 echo "Running mypy..."
-mypy . > var/logs/mypy.log 2>&1
+mypy --explicit-package-bases src/youtube_transcripts > var/logs/mypy.log 2>&1
 
 # Run pytest
 echo "Running pytest..."

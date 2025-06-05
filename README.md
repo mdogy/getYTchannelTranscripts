@@ -1,12 +1,14 @@
-# YouTube Channel Video Metadata Extractor
+# YouTube Channel Video Metadata and Transcript Extractor
 
-A Python tool to extract video metadata from YouTube channels and save it to CSV files.
+A Python tool to extract video metadata from YouTube channels and transcripts from videos.
 
 ## Features
 
 - Extract video metadata from YouTube channels
+- Extract transcripts from YouTube videos
 - Filter videos by date range
-- Save results to CSV files
+- Save results to CSV files or text/markdown
+- Support for timestamps in transcripts
 - Comprehensive test suite
 - Code quality checks with linting
 
@@ -27,20 +29,22 @@ pip install -e ".[dev]"
 
 ## Usage
 
+### Extracting Channel Video Metadata
+
 Basic usage:
 ```bash
-python channel_videos_to_csv.py --channel "https://www.youtube.com/@ChannelName"
+channel-videos-to-csv --channel "https://www.youtube.com/@ChannelName"
 ```
 
 With date filtering:
 ```bash
-python channel_videos_to_csv.py --channel "https://www.youtube.com/@ChannelName" --start-date "2023-01-01" --end-date "2023-12-31"
+channel-videos-to-csv --channel "https://www.youtube.com/@ChannelName" --start-date "2023-01-01" --end-date "2023-12-31"
 ```
 
 Get videos from the past year with all metadata:
 ```bash
 # Calculate dates for the past year
-python channel_videos_to_csv.py \
+channel-videos-to-csv \
   --channel "https://www.youtube.com/@ChannelName" \
   --start-date "$(date -v-1y +%Y-%m-%d)" \
   --end-date "$(date +%Y-%m-%d)" \
@@ -48,9 +52,26 @@ python channel_videos_to_csv.py \
   --log "var/logs/run.log"
 ```
 
-With logging:
+### Extracting Video Transcripts
+
+Basic usage (outputs to stdout):
 ```bash
-python channel_videos_to_csv.py --channel "https://www.youtube.com/@ChannelName" --log output/run.log
+extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+Save to file:
+```bash
+extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID" -o output/transcript.txt
+```
+
+Save as markdown with timestamps:
+```bash
+extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --format markdown -o output/transcript.md
+```
+
+Save without timestamps:
+```bash
+extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --no-timestamps -o output/transcript.txt
 ```
 
 ## Development
@@ -102,10 +123,10 @@ The application uses Python's logging module with the following configuration:
 - File output: DEBUG level and above
 - Error log: ERROR level and above
 
-Log files are stored in the `output` directory:
-- `output/app.log`: General application logs
-- `output/error.log`: Error logs
-- `output/run.log`: Runtime logs (when --log is specified)
+Log files are stored in the `var/logs` directory:
+- `var/logs/app.log`: General application logs
+- `var/logs/error.log`: Error logs
+- `var/logs/run.log`: Runtime logs (when --log is specified)
 
 ## License
 

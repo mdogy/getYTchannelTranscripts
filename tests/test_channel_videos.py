@@ -9,17 +9,16 @@ import shutil
 import pandas as pd
 import argparse
 
-from channel_videos_to_csv import (
+from youtube_transcripts.core.video_metadata import (
     get_channel_video_info,
     get_video_details,
     parse_upload_date,
-    get_unique_csv_filename,
     filter_video_by_date,
     build_video_row,
     filter_and_build_rows,
-    main,
-    setup_logging,
 )
+from youtube_transcripts.core.utils import get_unique_filename
+from youtube_transcripts.scripts.channel_videos_to_csv import main
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +58,8 @@ def sample_channel_info():
         "title": "Test Channel",
         "entries": [
             {
-                "_type": "video",
+                "_type": "url",
+                "ie_key": "Youtube",
                 "id": "video1",
                 "title": "Test Video 1",
                 "upload_date": "20230101",
@@ -71,7 +71,8 @@ def sample_channel_info():
                 "automatic_captions": {"en": [{"ext": "vtt"}]},
             },
             {
-                "_type": "video",
+                "_type": "url",
+                "ie_key": "Youtube",
                 "id": "video2",
                 "title": "Test Video 2",
                 "upload_date": "20230102",
@@ -90,10 +91,6 @@ def test_get_channel_video_info(
     mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
 ) -> None:
     """Test getting channel video information."""
-    mock_instance = Mock()
-    mock_ytdl.return_value.__enter__.return_value = mock_instance
-    mock_instance.extract_info.return_value = sample_channel_info
-
     test_urls = [
         "https://youtube.com/channel/UC123",
         "https://youtube.com/c/TestChannel",
@@ -101,10 +98,18 @@ def test_get_channel_video_info(
     ]
 
     for url in test_urls:
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = sample_channel_info
         result = get_channel_video_info(url)
         assert result == sample_channel_info
-        expected_url = url.replace("/c/", "/channel/") if "/c/" in url else url
-        mock_instance.extract_info.assert_called_with(expected_url, download=False)
+        # The code normalizes /c/ and /@ to /channel/
+        if "/c/" in url or "/@" in url:
+            expected_url = url.replace("/c/", "/channel/").replace("/@", "/channel/")
+        else:
+            expected_url = url
+        # Check the call on the current mock instance
+        mock_instance.extract_info.assert_called_once_with(expected_url, download=False)
 
 
 def test_get_channel_video_info_error(mock_ytdl: Mock) -> None:
@@ -147,13 +152,13 @@ def test_get_unique_csv_filename(tmp_path: Any) -> None:
     """Test generating unique CSV filenames."""
     os.makedirs(tmp_path / "output", exist_ok=True)
 
-    filename = get_unique_csv_filename("test", str(tmp_path / "output"))
+    filename = get_unique_filename("test", str(tmp_path / "output"))
     assert filename == str(tmp_path / "output" / "test.csv")
 
     with open(str(tmp_path / "output" / "test.csv"), "w") as f:
         f.write("test")
 
-    filename = get_unique_csv_filename("test", str(tmp_path / "output"))
+    filename = get_unique_filename("test", str(tmp_path / "output"))
     assert filename == str(tmp_path / "output" / "test_1.csv")
 
 
@@ -405,6 +410,8 @@ def test_filter_video_by_date() -> None:
 def test_build_video_row() -> None:
     """Test building a video row."""
     entry = {
+        "_type": "url",
+        "ie_key": "Youtube",
         "id": "video1",
         "title": "Test Video",
         "upload_date": "20230101",
@@ -416,6 +423,7 @@ def test_build_video_row() -> None:
         "automatic_captions": {"en": [{"ext": "vtt"}]},
     }
     row = build_video_row(entry, None)
+    print("Row for debug:", row)
     assert row["video_id"] == "video1"
     assert row["title"] == "Test Video"
     assert row["has_captions"] is True
@@ -425,7 +433,8 @@ def test_filter_and_build_rows() -> None:
     """Test filtering and building rows."""
     entries = [
         {
-            "_type": "video",
+            "_type": "url",
+            "ie_key": "Youtube",
             "id": "video1",
             "title": "Test Video 1",
             "upload_date": "20230101",
@@ -440,8 +449,7 @@ def test_filter_and_build_rows() -> None:
     args = argparse.Namespace(
         start_date="2023-01-01", end_date="2023-01-31", row_limit=5
     )
-    logger = logging.getLogger("test")
-    rows = filter_and_build_rows(entries, args, logger)
+    rows = filter_and_build_rows(entries, args)
     assert len(rows) == 1
     assert rows[0]["video_id"] == "video1"
 
@@ -460,7 +468,8 @@ def test_real_gregisenberg_extraction():
     result = subprocess.run(
         [
             sys.executable,
-            "channel_videos_to_csv.py",
+            "-m",
+            "youtube_transcripts.scripts.channel_videos_to_csv",
             "--channel",
             "https://www.youtube.com/@GregIsenberg",
             "-o",
