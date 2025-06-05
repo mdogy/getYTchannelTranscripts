@@ -193,18 +193,13 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# output files
+# Variable data directory
+var/
+var/logs/
+var/test-results/
+
+# output files (CSV only)
 output/*.csv
-output/*.log
-output/test-results.xml
-output/test.log
-output/run.log
-output/app.log
-output/error.log
-output/flake8.log
-output/black.log
-output/mypy.log
-output/pytest.log
 
 # Test coverage
 htmlcov/

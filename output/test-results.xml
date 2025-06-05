@@ -1,1 +1,288 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="13" time="157.126" timestamp="2025-06-05T12:14:39.125871+03:00" hostname="CCNY_Apple_DEP_KWWLWNJQH3"><testcase classname="tests.test_channel_videos" name="test_get_channel_video_info" time="0.005" /><testcase classname="tests.test_channel_videos" name="test_get_channel_video_info_error" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_get_video_details" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_parse_upload_date" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_get_unique_csv_filename" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_youtube_dl_output_format" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_main_with_channel_url" time="0.005" /><testcase classname="tests.test_channel_videos" name="test_main_with_date_filters" time="0.005" /><testcase classname="tests.test_channel_videos" name="test_main_with_invalid_date" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_main_with_log_file" time="0.004" /><testcase classname="tests.test_channel_videos" name="test_main_with_no_channel_info" time="0.003" /><testcase classname="tests.test_channel_videos" name="test_main_with_invalid_entries" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_main_with_missing_video_data" time="0.003" /><testcase time="0.000" /></testsuite></testsuites>
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="16" time="1.374" timestamp="2025-06-05T12:48:02.350517+03:00" hostname="CCNY_Apple_DEP_KWWLWNJQH3"><testcase classname="tests.test_channel_videos" name="test_get_channel_video_info" time="0.004" /><testcase classname="tests.test_channel_videos" name="test_get_channel_video_info_error" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_get_video_details" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_parse_upload_date" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_get_unique_csv_filename" time="0.002" /><testcase classname="tests.test_channel_videos" name="test_youtube_dl_output_format" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_main_with_channel_url" time="0.005"><failure message="AssertionError: assert 4 == 2&#10; +  where 4 = &lt;MagicMock name='makedirs' id='5084305536'&gt;.call_count">mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5084305632'&gt;
+sample_channel_info = {'entries': [{'_type': 'video', 'automatic_captions': {'en': [{'ext': 'vtt'}]}, 'description': 'Test Description', 'du...ideo', 'automatic_captions': {}, 'description': 'Test Description 2', 'duration': 1800, ...}], 'title': 'Test Channel'}
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_main_with_channel_url0/output')
+
+    def test_main_with_channel_url(
+        mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+    ) -&gt; None:
+        """Test main function with channel URL argument."""
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = sample_channel_info
+    
+        # Test with channel URL
+        with patch(
+            "sys.argv",
+            ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+        ):
+            with patch("os.makedirs") as mock_makedirs:
+                with patch("pandas.DataFrame.to_csv") as mock_to_csv:
+                    main()
+&gt;                   assert mock_makedirs.call_count == 2
+E                   AssertionError: assert 4 == 2
+E                    +  where 4 = &lt;MagicMock name='makedirs' id='5084305536'&gt;.call_count
+
+tests/test_channel_videos.py:213: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_main_with_date_filters" time="0.005"><failure message="AssertionError: assert 4 == 2&#10; +  where 4 = &lt;MagicMock name='makedirs' id='5084893872'&gt;.call_count">mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5084380576'&gt;
+sample_channel_info = {'entries': [{'_type': 'video', 'automatic_captions': {'en': [{'ext': 'vtt'}]}, 'description': 'Test Description', 'du...ideo', 'automatic_captions': {}, 'description': 'Test Description 2', 'duration': 1800, ...}], 'title': 'Test Channel'}
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_main_with_date_filters0/output')
+
+    def test_main_with_date_filters(
+        mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+    ) -&gt; None:
+        """Test main function with date filters."""
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = sample_channel_info
+    
+        # Test with date filters
+        with patch(
+            "sys.argv",
+            [
+                "script.py",
+                "--channel",
+                "https://youtube.com/channel/UC123",
+                "--start-date",
+                "2023-01-01",
+                "--end-date",
+                "2023-01-02",
+            ],
+        ):
+            with patch("os.makedirs") as mock_makedirs:
+                with patch("pandas.DataFrame.to_csv") as mock_to_csv:
+                    main()
+&gt;                   assert mock_makedirs.call_count == 2
+E                   AssertionError: assert 4 == 2
+E                    +  where 4 = &lt;MagicMock name='makedirs' id='5084893872'&gt;.call_count
+
+tests/test_channel_videos.py:243: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_main_with_invalid_date" time="0.003"><failure message="AssertionError: Expected 'exit' to be called once. Called 2 times.&#10;Calls: [call(1), call(1)].">self = &lt;MagicMock name='exit' id='4441779824'&gt;, args = (1,), kwargs = {}
+msg = "Expected 'exit' to be called once. Called 2 times.\nCalls: [call(1), call(1)]."
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+&gt;           raise AssertionError(msg)
+E           AssertionError: Expected 'exit' to be called once. Called 2 times.
+E           Calls: [call(1), call(1)].
+
+../../../miniconda3/lib/python3.12/unittest/mock.py:960: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5084371072'&gt;
+
+    def test_main_with_invalid_date(mock_ytdl: Mock) -&gt; None:
+        """Test main function with invalid date format."""
+        with patch(
+            "sys.argv",
+            [
+                "script.py",
+                "--channel",
+                "https://youtube.com/channel/UC123",
+                "--start-date",
+                "invalid-date",
+            ],
+        ):
+            with patch("sys.exit") as mock_exit:
+                main()
+&gt;               mock_exit.assert_called_once_with(1)
+E               AssertionError: Expected 'exit' to be called once. Called 2 times.
+E               Calls: [call(1), call(1)].
+
+tests/test_channel_videos.py:263: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_main_with_log_file" time="0.004"><failure message="AssertionError: assert 3 == 2&#10; +  where 3 = &lt;MagicMock name='makedirs' id='5083915152'&gt;.call_count">mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5084178832'&gt;
+sample_channel_info = {'entries': [{'_type': 'video', 'automatic_captions': {'en': [{'ext': 'vtt'}]}, 'description': 'Test Description', 'du...ideo', 'automatic_captions': {}, 'description': 'Test Description 2', 'duration': 1800, ...}], 'title': 'Test Channel'}
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_main_with_log_file0/output')
+
+    def test_main_with_log_file(
+        mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+    ) -&gt; None:
+        """Test main function with log file output."""
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = sample_channel_info
+    
+        log_file = temp_output_dir / "test.log"
+    
+        # Test with log file
+        with patch(
+            "sys.argv",
+            [
+                "script.py",
+                "--channel",
+                "https://youtube.com/channel/UC123",
+                "--log",
+                str(log_file),
+            ],
+        ):
+            with patch("os.makedirs") as mock_makedirs:
+                with patch("pandas.DataFrame.to_csv") as mock_to_csv:
+                    main()
+&gt;                   assert mock_makedirs.call_count == 2
+E                   AssertionError: assert 3 == 2
+E                    +  where 3 = &lt;MagicMock name='makedirs' id='5083915152'&gt;.call_count
+
+tests/test_channel_videos.py:290: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_main_with_no_channel_info" time="0.003"><failure message="AssertionError: Expected 'exit' to be called once. Called 2 times.&#10;Calls: [call(1), call(1)].">self = &lt;MagicMock name='exit' id='5085006352'&gt;, args = (1,), kwargs = {}
+msg = "Expected 'exit' to be called once. Called 2 times.\nCalls: [call(1), call(1)]."
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+&gt;           raise AssertionError(msg)
+E           AssertionError: Expected 'exit' to be called once. Called 2 times.
+E           Calls: [call(1), call(1)].
+
+../../../miniconda3/lib/python3.12/unittest/mock.py:960: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5084754480'&gt;
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_main_with_no_channel_info0/output')
+
+    def test_main_with_no_channel_info(mock_ytdl: Mock, temp_output_dir) -&gt; None:
+        """Test main function when no channel info is returned."""
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = None
+    
+        # Test with no channel info
+        with patch(
+            "sys.argv",
+            ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+        ):
+            with patch("sys.exit") as mock_exit:
+                main()
+&gt;               mock_exit.assert_called_once_with(1)
+E               AssertionError: Expected 'exit' to be called once. Called 2 times.
+E               Calls: [call(1), call(1)].
+
+tests/test_channel_videos.py:310: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_main_with_invalid_entries" time="0.003"><failure message="AssertionError: Expected 'exit' to be called once. Called 2 times.&#10;Calls: [call(1), call(1)].">self = &lt;MagicMock name='exit' id='5085196080'&gt;, args = (1,), kwargs = {}
+msg = "Expected 'exit' to be called once. Called 2 times.\nCalls: [call(1), call(1)]."
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+&gt;           raise AssertionError(msg)
+E           AssertionError: Expected 'exit' to be called once. Called 2 times.
+E           Calls: [call(1), call(1)].
+
+../../../miniconda3/lib/python3.12/unittest/mock.py:960: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5085190320'&gt;
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_main_with_invalid_entries0/output')
+
+    def test_main_with_invalid_entries(mock_ytdl: Mock, temp_output_dir) -&gt; None:
+        """Test main function with invalid entries in channel info."""
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = {
+            "title": "Test Channel",
+            "entries": None,  # Invalid entries
+        }
+    
+        # Test with invalid entries
+        with patch(
+            "sys.argv",
+            ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+        ):
+            with patch("sys.exit") as mock_exit:
+                main()
+&gt;               mock_exit.assert_called_once_with(1)
+E               AssertionError: Expected 'exit' to be called once. Called 2 times.
+E               Calls: [call(1), call(1)].
+
+tests/test_channel_videos.py:329: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_main_with_missing_video_data" time="0.004"><failure message="AssertionError: assert 4 == 2&#10; +  where 4 = &lt;MagicMock name='makedirs' id='5085238320'&gt;.call_count">mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5084767216'&gt;
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_main_with_missing_video_d0/output')
+
+    def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -&gt; None:
+        """Test main function with missing video data."""
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = {
+            "title": "Test Channel",
+            "entries": [
+                {
+                    "_type": "video",
+                    "id": "video1",
+                    # Missing upload_date to test skipping
+                }
+            ],
+        }
+    
+        # Test with missing video data
+        with patch(
+            "sys.argv",
+            ["script.py", "--channel", "https://youtube.com/channel/UC123"],
+        ):
+            with patch("os.makedirs") as mock_makedirs:
+                with patch("pandas.DataFrame") as mock_df:
+                    mock_df_instance = Mock()
+                    mock_df.return_value = mock_df_instance
+                    main()
+&gt;                   assert mock_makedirs.call_count == 2
+E                   AssertionError: assert 4 == 2
+E                    +  where 4 = &lt;MagicMock name='makedirs' id='5085238320'&gt;.call_count
+
+tests/test_channel_videos.py:357: AssertionError</failure></testcase><testcase classname="tests.test_channel_videos" name="test_channel_without_date_filters" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_channel_with_date_filters" time="0.001" /><testcase classname="tests.test_channel_videos" name="test_channel_csv_generation" time="0.005"><failure message="AssertionError: assert 4 == 2&#10; +  where 4 = &lt;MagicMock name='makedirs' id='4406751072'&gt;.call_count">mock_ytdl = &lt;MagicMock name='YoutubeDL' id='5085192720'&gt;
+sample_channel_info = {'entries': [{'_type': 'video', 'automatic_captions': {'en': [{'ext': 'vtt'}]}, 'description': 'Test Description', 'du...ideo', 'automatic_captions': {}, 'description': 'Test Description 2', 'duration': 1800, ...}], 'title': 'Test Channel'}
+temp_output_dir = PosixPath('/private/var/folders/y1/kdc84r8s1nlgrnqgyxz8qc440000gn/T/pytest-of-michael/pytest-30/test_channel_csv_generation0/output')
+
+    def test_channel_csv_generation(
+        mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+    ) -&gt; None:
+        """Test that CSV file is generated with correct content."""
+        # Setup mock
+        mock_instance = Mock()
+        mock_ytdl.return_value.__enter__.return_value = mock_instance
+        mock_instance.extract_info.return_value = sample_channel_info
+    
+        channel_url = "https://www.youtube.com/@GregIsenberg"
+    
+        # Create a mock DataFrame
+        mock_df = MagicMock(spec=pd.DataFrame)
+        mock_df.columns = [
+            "id",
+            "title",
+            "upload_date",
+            "uploader",
+            "duration",
+            "view_count",
+            "description",
+            "url",
+            "has_captions",
+        ]
+    
+        # Run the main function
+        with patch(
+            "sys.argv",
+            [
+                "channel_videos_to_csv.py",
+                "--channel",
+                channel_url,
+                "--output-dir",
+                str(temp_output_dir),
+            ],
+        ):
+            with patch("os.makedirs") as mock_makedirs:
+                with patch("pandas.DataFrame", return_value=mock_df) as mock_df_class:
+                    main()
+&gt;                   assert mock_makedirs.call_count == 2
+E                   AssertionError: assert 4 == 2
+E                    +  where 4 = &lt;MagicMock name='makedirs' id='4406751072'&gt;.call_count
+
+tests/test_channel_videos.py:467: AssertionError</failure></testcase></testsuite></testsuites>

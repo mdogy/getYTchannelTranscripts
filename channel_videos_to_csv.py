@@ -1,13 +1,12 @@
-import yt_dlp
+import yt_dlp  # type: ignore
 import pandas as pd
 from datetime import datetime, date
-import re
 import os
 import sys
 import argparse
 import logging
 import logging.config
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # Configure logging
 logging.config.fileConfig("logging.conf")
@@ -100,64 +99,73 @@ def get_unique_csv_filename(base_name: str, output_dir: str) -> str:
         i += 1
 
 
-def filter_and_build_rows(entries, args, logger):
-    """Filter video entries and build rows for the DataFrame."""
+def filter_video_by_date(video_date: date, args: argparse.Namespace) -> bool:
+    if args.start_date:
+        try:
+            start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+            if video_date < start_date:
+                return False
+        except ValueError:
+            logger.error(
+                f"Invalid start date format: {args.start_date}. Use YYYY-MM-DD"
+            )
+            sys.exit(1)
+    if args.end_date:
+        try:
+            end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
+            if video_date > end_date:
+                return False
+        except ValueError:
+            logger.error(f"Invalid end date format: {args.end_date}. Use YYYY-MM-DD")
+            sys.exit(1)
+    return True
+
+
+def build_video_row(
+    entry: Dict[str, Any], video_info: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    return {
+        "id": entry.get("id"),
+        "title": entry.get("title"),
+        "upload_date": entry.get("upload_date"),
+        "uploader": entry.get("uploader"),
+        "duration": entry.get("duration"),
+        "view_count": entry.get("view_count"),
+        "description": entry.get("description"),
+        "url": entry.get("webpage_url"),
+        "has_captions": bool(entry.get("automatic_captions", {}).get("en")),
+    }
+
+
+def filter_and_build_rows(
+    entries: List[Dict[str, Any]], args: argparse.Namespace, logger: logging.Logger
+) -> List[Dict[str, Any]]:
     rows = []
     for entry in entries:
         if entry.get("_type") != "video":
             continue
         upload_date = entry.get("upload_date")
         if not upload_date:
-            logger.warning(f"Skipping video {entry.get('id')} - no upload date")
+            logger.warning("Skipping video %s - no upload date", entry.get("id"))
             continue
         try:
             video_date = parse_upload_date(upload_date)
         except ValueError as e:
-            logger.warning(f"Skipping video {entry.get('id')} - invalid date: {e}")
+            logger.warning("Skipping video %s - invalid date: %s", entry.get("id"), e)
             continue
-        if args.start_date:
-            try:
-                start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-                if video_date < start_date:
-                    continue
-            except ValueError:
-                logger.error(
-                    f"Invalid start date format: {args.start_date}. Use YYYY-MM-DD"
-                )
-                sys.exit(1)
-        if args.end_date:
-            try:
-                end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
-                if video_date > end_date:
-                    continue
-            except ValueError:
-                logger.error(
-                    f"Invalid end date format: {args.end_date}. Use YYYY-MM-DD"
-                )
-                sys.exit(1)
+        if not filter_video_by_date(video_date, args):
+            continue
         video_url = entry.get("webpage_url")
         if not video_url:
-            logger.warning(f"Skipping video {entry.get('id')} - no URL")
+            logger.warning("Skipping video %s - no URL", entry.get("id"))
             continue
         video_info = get_video_details(video_url)
         if not video_info:
             logger.warning(
-                f"Skipping video {entry.get('id')} - could not get video details"
+                "Skipping video %s - could not get video details", entry.get("id")
             )
             continue
-        rows.append(
-            {
-                "id": entry.get("id"),
-                "title": entry.get("title"),
-                "upload_date": upload_date,
-                "uploader": entry.get("uploader"),
-                "duration": entry.get("duration"),
-                "view_count": entry.get("view_count"),
-                "description": entry.get("description"),
-                "url": video_url,
-                "has_captions": bool(entry.get("automatic_captions", {}).get("en")),
-            }
-        )
+        rows.append(build_video_row(entry, video_info))
     return rows
 
 
@@ -180,16 +188,23 @@ def main() -> None:
         default="output",
         help="Directory to save the CSV file (default: output)",
     )
-    parser.add_argument("--log", help="Log file path (default: output/app.log)")
+    parser.add_argument("--log", help="Log file path (default: var/logs/app.log)")
     args = parser.parse_args()
 
-    log_file = args.log or os.path.join(args.output_dir, "app.log")
+    # Create necessary directories
+    os.makedirs("var/logs", exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    log_file = args.log or os.path.join("var/logs", "app.log")
     # If --output-dir is not specified (i.e., is 'output') and --log is specified, use log dir for output
     if args.log and args.output_dir == "output":
         output_dir = os.path.dirname(log_file)
     else:
         output_dir = args.output_dir
     log_dir = os.path.dirname(log_file)
+
+    # Ensure log directory exists
+    os.makedirs(log_dir, exist_ok=True)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -206,14 +221,12 @@ def main() -> None:
         if not info:
             logger.error("No channel information returned")
             sys.exit(1)
-            return
         channel_name = info.get("title", "channel")
         logger.info(f"Processing channel: {channel_name}")
         entries = info.get("entries", [])
         if not entries:
             logger.error("No video entries found in channel")
             sys.exit(1)
-            return
         rows = filter_and_build_rows(entries, args, logger)
         df = pd.DataFrame(rows)
         output_file = get_unique_csv_filename(channel_name, output_dir)
@@ -232,7 +245,6 @@ def main() -> None:
     except Exception as e:
         logger.error(f"Error processing channel: {e}")
         sys.exit(1)
-        return
     finally:
         for handler in logger.handlers[:]:
             handler.close()

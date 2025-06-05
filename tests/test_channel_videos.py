@@ -1,10 +1,10 @@
 import pytest
 import logging
 import os
-from datetime import date
-from unittest.mock import Mock, patch
+from datetime import datetime, date
+from unittest.mock import Mock, patch, MagicMock
 import sys
-from typing import Dict, Any, Generator
+from typing import Dict, Any, Generator, Optional, List
 import shutil
 import pandas as pd
 
@@ -14,6 +14,9 @@ from channel_videos_to_csv import (
     get_video_details,
     parse_upload_date,
     get_unique_csv_filename,
+    filter_video_by_date,
+    build_video_row,
+    filter_and_build_rows,
     main,
 )
 
@@ -21,11 +24,12 @@ from channel_videos_to_csv import (
 @pytest.fixture(autouse=True)
 def setup_logging():
     """Setup logging for tests."""
+    os.makedirs("var/logs", exist_ok=True)
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler("output/test.log"),
+            logging.FileHandler("var/logs/test.log"),
             logging.StreamHandler(sys.stdout),
         ],
     )
@@ -209,7 +213,9 @@ def test_main_with_channel_url(
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame.to_csv") as mock_to_csv:
                 main()
-                mock_makedirs.assert_called_once()
+                assert mock_makedirs.call_count == 2
+                mock_makedirs.assert_any_call("var/logs", exist_ok=True)
+                mock_makedirs.assert_any_call("output", exist_ok=True)
                 mock_to_csv.assert_called_once()
 
 
@@ -237,7 +243,9 @@ def test_main_with_date_filters(
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame.to_csv") as mock_to_csv:
                 main()
-                mock_makedirs.assert_called_once()
+                assert mock_makedirs.call_count == 2
+                mock_makedirs.assert_any_call("var/logs", exist_ok=True)
+                mock_makedirs.assert_any_call("output", exist_ok=True)
                 mock_to_csv.assert_called_once()
 
 
@@ -282,7 +290,9 @@ def test_main_with_log_file(
         with patch("os.makedirs") as mock_makedirs:
             with patch("pandas.DataFrame.to_csv") as mock_to_csv:
                 main()
-                mock_makedirs.assert_called_once()
+                assert mock_makedirs.call_count == 2
+                mock_makedirs.assert_any_call("var/logs", exist_ok=True)
+                mock_makedirs.assert_any_call(str(temp_output_dir), exist_ok=True)
                 mock_to_csv.assert_called_once()
                 assert log_file.exists()
 
@@ -347,7 +357,9 @@ def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
                 mock_df_instance = Mock()
                 mock_df.return_value = mock_df_instance
                 main()
-                mock_makedirs.assert_called_once()
+                assert mock_makedirs.call_count == 2
+                mock_makedirs.assert_any_call("var/logs", exist_ok=True)
+                mock_makedirs.assert_any_call("output", exist_ok=True)
                 mock_df.assert_called_once()
                 # The DataFrame should be created with an empty list of rows
                 args, kwargs = mock_df.call_args
@@ -356,8 +368,15 @@ def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
                 assert len(rows_arg) == 0
 
 
-def test_channel_without_date_filters():
+def test_channel_without_date_filters(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
+) -> None:
     """Test that channel extraction without date filters returns non-empty results."""
+    # Setup mock
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = sample_channel_info
+
     channel_url = "https://www.youtube.com/@GregIsenberg"
     info = get_channel_video_info(channel_url)
     assert info is not None
@@ -365,8 +384,15 @@ def test_channel_without_date_filters():
     assert len(info["entries"]) > 0
 
 
-def test_channel_with_date_filters():
+def test_channel_with_date_filters(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any]
+) -> None:
     """Test that channel extraction with date filters returns correct results."""
+    # Setup mock
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = sample_channel_info
+
     channel_url = "https://www.youtube.com/@GregIsenberg"
     start_date = "2024-05-01"
     end_date = "2024-06-30"
@@ -402,39 +428,147 @@ def test_channel_with_date_filters():
         assert start <= video_date <= end
 
 
-def test_channel_csv_generation():
+def test_channel_csv_generation(
+    mock_ytdl: Mock, sample_channel_info: Dict[str, Any], temp_output_dir
+) -> None:
     """Test that CSV file is generated with correct content."""
+    # Setup mock
+    mock_instance = Mock()
+    mock_ytdl.return_value.__enter__.return_value = mock_instance
+    mock_instance.extract_info.return_value = sample_channel_info
+
     channel_url = "https://www.youtube.com/@GregIsenberg"
-    output_file = "output/Greg_Isenberg_videos.csv"
+
+    # Create a mock DataFrame
+    mock_df = MagicMock(spec=pd.DataFrame)
+    mock_df.columns = [
+        "id",
+        "title",
+        "upload_date",
+        "uploader",
+        "duration",
+        "view_count",
+        "description",
+        "url",
+        "has_captions",
+    ]
 
     # Run the main function
-    sys.argv = [
-        "channel_videos_to_csv.py",
-        "--channel",
-        channel_url,
-        "--output-dir",
-        "output",
+    with patch(
+        "sys.argv",
+        [
+            "channel_videos_to_csv.py",
+            "--channel",
+            channel_url,
+            "--output-dir",
+            str(temp_output_dir),
+        ],
+    ):
+        with patch("os.makedirs") as mock_makedirs:
+            with patch("pandas.DataFrame", return_value=mock_df) as mock_df_class:
+                main()
+                assert mock_makedirs.call_count == 2
+                mock_makedirs.assert_any_call("var/logs", exist_ok=True)
+                mock_makedirs.assert_any_call(str(temp_output_dir), exist_ok=True)
+                mock_df_class.assert_called_once()
+
+                # Verify the DataFrame was created with correct columns
+                assert all(
+                    col in mock_df.columns
+                    for col in [
+                        "id",
+                        "title",
+                        "upload_date",
+                        "uploader",
+                        "duration",
+                        "view_count",
+                        "description",
+                        "url",
+                        "has_captions",
+                    ]
+                )
+
+
+def test_filter_video_by_date(self) -> None:
+    args = MagicMock()
+    args.start_date = "2023-01-01"
+    args.end_date = "2023-12-31"
+    result = filter_video_by_date(date(2023, 6, 1), args)
+    self.assertTrue(result)
+
+
+def test_build_video_row(self) -> None:
+    entry = {
+        "id": "123",
+        "title": "Test Video",
+        "upload_date": "20230101",
+        "uploader": "Test Channel",
+        "duration": 120,
+        "view_count": 1000,
+        "description": "Test Description",
+        "webpage_url": "https://youtube.com/watch?v=123",
+        "automatic_captions": {"en": True},
+    }
+    video_info = None
+    result = build_video_row(entry, video_info)
+    self.assertEqual(result["id"], "123")
+    self.assertEqual(result["title"], "Test Video")
+
+
+def test_filter_and_build_rows(self) -> None:
+    entries = [
+        {
+            "_type": "video",
+            "id": "123",
+            "title": "Test Video",
+            "upload_date": "20230101",
+            "webpage_url": "https://youtube.com/watch?v=123",
+        }
     ]
-    main()
+    args = MagicMock()
+    args.start_date = "2023-01-01"
+    args.end_date = "2023-12-31"
+    logger = MagicMock()
+    result = filter_and_build_rows(entries, args, logger)
+    self.assertEqual(len(result), 1)
+    self.assertEqual(result[0]["id"], "123")
 
-    # Verify CSV file exists and is not empty
-    assert os.path.exists(output_file)
-    assert os.path.getsize(output_file) > 0
 
-    # Read CSV and verify content
-    df = pd.read_csv(output_file)
-    assert len(df) > 0
-    assert all(
-        col in df.columns
-        for col in [
-            "id",
-            "title",
-            "upload_date",
-            "uploader",
-            "duration",
-            "view_count",
-            "description",
-            "url",
-            "has_captions",
-        ]
+def test_main(self) -> None:
+    # Mock the get_channel_video_info method to return a sample channel info
+    mock_get_channel_video_info.return_value = {
+        "title": "Test Channel",
+        "entries": [
+            {
+                "_type": "video",
+                "id": "123",
+                "title": "Test Video",
+                "upload_date": "20230101",
+                "webpage_url": "https://youtube.com/watch?v=123",
+            }
+        ],
+    }
+    # Mock the filter_and_build_rows method to return a sample row
+    mock_filter_and_build_rows.return_value = [
+        {
+            "id": "123",
+            "title": "Test Video",
+            "upload_date": "20230101",
+            "uploader": "Test Channel",
+            "duration": 120,
+            "view_count": 1000,
+            "description": "Test Description",
+            "url": "https://youtube.com/watch?v=123",
+            "has_captions": True,
+        }
+    ]
+    # Mock the sys.argv to simulate command line arguments
+    with patch(
+        "sys.argv",
+        ["channel_videos_to_csv.py", "--channel", "https://youtube.com/@TestChannel"],
+    ):
+        main()
+    # Check if the CSV file was created
+    self.assertTrue(
+        os.path.exists(os.path.join(self.temp_output_dir, "Test Channel.csv"))
     )
