@@ -1,9 +1,10 @@
 """Core functionality for extracting and formatting YouTube video transcripts."""
 
 import yt_dlp  # type: ignore
-from typing import Optional, Dict, Any, List, Tuple, Union
+from typing import Optional, Dict, Any, List
 import logging
 from datetime import timedelta
+import re
 
 logger = logging.getLogger("yt_channel_metadata")
 
@@ -30,14 +31,14 @@ def extract_transcript(video_url: str) -> Optional[List[Dict[str, Any]]]:
                 logger.error("No video information returned")
                 return None
 
-            # Try to get manual captions first, then automatic
+            # Try to get manual captions first
             captions = info.get("subtitles", {}).get("en", [])
             if not captions:
+                # If no manual captions, try auto-generated
                 captions = info.get("automatic_captions", {}).get("en", [])
-
-            if not captions:
-                logger.error("No captions found for video")
-                return None
+                if not captions:
+                    logger.error("No captions found for video")
+                    return None
 
             # Get the first available caption format
             caption_data = captions[0]
@@ -102,3 +103,46 @@ def format_transcript(
         return "\n\n".join(formatted_lines)
     else:
         return "\n".join(formatted_lines)
+
+
+def parse_vtt_file(vtt_path: str, include_timestamps: bool = False) -> Optional[List[Dict[str, Any]]]:
+    """
+    Parses a .vtt subtitle file and extracts transcript segments.
+    Returns a list of dicts with 'start', 'end', and 'text'.
+    """
+    segments = []
+    timestamp_re = re.compile(r"(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})")
+    start = end = None
+    text_lines = []
+    with open(vtt_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            match = timestamp_re.match(line)
+            if match:
+                if start and text_lines:
+                    # Save previous segment
+                    segments.append({
+                        "start": _vtt_timestamp_to_seconds(start),
+                        "end": _vtt_timestamp_to_seconds(end),
+                        "text": " ".join(text_lines).strip(),
+                    })
+                    text_lines = []
+                start, end = match.groups()
+            elif line and not line.startswith("WEBVTT") and not line.startswith("Kind:") and not line.startswith("Language:") and not line.startswith("NOTE"):
+                text_lines.append(line)
+        # Add last segment
+        if start and text_lines:
+            segments.append({
+                "start": _vtt_timestamp_to_seconds(start),
+                "end": _vtt_timestamp_to_seconds(end),
+                "text": " ".join(text_lines).strip(),
+            })
+    if not segments:
+        return None
+    return segments
+
+
+def _vtt_timestamp_to_seconds(ts: str) -> float:
+    h, m, s = ts.split(":")
+    s, ms = s.split(".")
+    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0

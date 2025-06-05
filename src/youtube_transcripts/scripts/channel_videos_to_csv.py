@@ -8,14 +8,12 @@ import os
 import sys
 import argparse
 import logging
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 
 from youtube_transcripts.core.video_metadata import (
-    get_video_details,
-    parse_upload_date,
     build_video_row,
 )
-from youtube_transcripts.core.utils import setup_logging, get_unique_filename
+from youtube_transcripts.core.utils import setup_logging
 
 # Create a module-level logger
 logger = logging.getLogger("yt_channel_metadata")
@@ -64,7 +62,8 @@ def get_channel_video_info(channel_url: str) -> Optional[Dict[str, Any]]:
             for entry in entries:
                 if entry.get("_type") == "playlist" and "entries" in entry:
                     logger.info(
-                        f"Processing playlist: {entry.get('title', 'unknown')} with {len(entry['entries'])} videos"
+                        f"Processing playlist: {entry.get('title', 'unknown')} with "
+                        f"{len(entry['entries'])} videos"
                     )
                     all_entries.extend(entry["entries"])
                 else:
@@ -121,7 +120,8 @@ def filter_and_build_rows(
 
     for entry in entries:
         logger.info(
-            f"Processing entry type: {entry.get('_type', 'unknown')}, id: {entry.get('id', 'unknown')}"
+            f"Processing entry type: {entry.get('_type', 'unknown')}, "
+            f"id: {entry.get('id', 'unknown')}"
         )
 
         # Skip non-video entries

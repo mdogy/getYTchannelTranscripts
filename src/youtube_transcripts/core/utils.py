@@ -3,7 +3,6 @@
 import os
 import sys
 import logging
-from typing import Optional
 
 
 def setup_logging(log_file: str) -> logging.Logger:
