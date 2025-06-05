@@ -108,22 +108,16 @@ def filter_and_build_rows(entries, args, logger):
             continue
         upload_date = entry.get("upload_date")
         if not upload_date:
-            logger.warning(
-                f"Skipping video {entry.get('id')} - no upload date"
-            )
+            logger.warning(f"Skipping video {entry.get('id')} - no upload date")
             continue
         try:
             video_date = parse_upload_date(upload_date)
         except ValueError as e:
-            logger.warning(
-                f"Skipping video {entry.get('id')} - invalid date: {e}"
-            )
+            logger.warning(f"Skipping video {entry.get('id')} - invalid date: {e}")
             continue
         if args.start_date:
             try:
-                start_date = datetime.strptime(
-                    args.start_date, "%Y-%m-%d"
-                ).date()
+                start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
                 if video_date < start_date:
                     continue
             except ValueError:
@@ -133,9 +127,7 @@ def filter_and_build_rows(entries, args, logger):
                 sys.exit(1)
         if args.end_date:
             try:
-                end_date = datetime.strptime(
-                    args.end_date, "%Y-%m-%d"
-                ).date()
+                end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
                 if video_date > end_date:
                     continue
             except ValueError:
@@ -145,9 +137,7 @@ def filter_and_build_rows(entries, args, logger):
                 sys.exit(1)
         video_url = entry.get("webpage_url")
         if not video_url:
-            logger.warning(
-                f"Skipping video {entry.get('id')} - no URL"
-            )
+            logger.warning(f"Skipping video {entry.get('id')} - no URL")
             continue
         video_info = get_video_details(video_url)
         if not video_info:
@@ -165,9 +155,7 @@ def filter_and_build_rows(entries, args, logger):
                 "view_count": entry.get("view_count"),
                 "description": entry.get("description"),
                 "url": video_url,
-                "has_captions": bool(
-                    entry.get("automatic_captions", {}).get("en")
-                ),
+                "has_captions": bool(entry.get("automatic_captions", {}).get("en")),
             }
         )
     return rows
@@ -181,30 +169,23 @@ def main() -> None:
     parser.add_argument(
         "--channel",
         required=True,
-        help="YouTube channel URL (e.g., https://youtube.com/channel/UC...)"
+        help="YouTube channel URL (e.g., https://youtube.com/channel/UC...)",
     )
     parser.add_argument(
-        "--start-date",
-        help="Start date for filtering videos (YYYY-MM-DD)"
+        "--start-date", help="Start date for filtering videos (YYYY-MM-DD)"
     )
-    parser.add_argument(
-        "--end-date",
-        help="End date for filtering videos (YYYY-MM-DD)"
-    )
+    parser.add_argument("--end-date", help="End date for filtering videos (YYYY-MM-DD)")
     parser.add_argument(
         "--output-dir",
         default="output",
-        help="Directory to save the CSV file (default: output)"
+        help="Directory to save the CSV file (default: output)",
     )
-    parser.add_argument(
-        "--log",
-        help="Log file path (default: output/app.log)"
-    )
+    parser.add_argument("--log", help="Log file path (default: output/app.log)")
     args = parser.parse_args()
 
     log_file = args.log or os.path.join(args.output_dir, "app.log")
     # If --output-dir is not specified (i.e., is 'output') and --log is specified, use log dir for output
-    if args.log and args.output_dir == 'output':
+    if args.log and args.output_dir == "output":
         output_dir = os.path.dirname(log_file)
     else:
         output_dir = args.output_dir

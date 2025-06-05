@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import sys
 from typing import Dict, Any, Generator
 import shutil
+import pandas as pd
 
 # Import the functions we want to test
 from channel_videos_to_csv import (
@@ -106,12 +107,8 @@ def test_get_channel_video_info(
         result = get_channel_video_info(url)
         assert result == sample_channel_info
         # The URL should be converted to channel format for /c/ URLs
-        expected_url = (
-            url.replace("/c/", "/channel/") if "/c/" in url else url
-        )
-        mock_instance.extract_info.assert_called_with(
-            expected_url, download=False
-        )
+        expected_url = url.replace("/c/", "/channel/") if "/c/" in url else url
+        mock_instance.extract_info.assert_called_with(expected_url, download=False)
 
 
 def test_get_channel_video_info_error(mock_ytdl: Mock) -> None:
@@ -229,9 +226,12 @@ def test_main_with_date_filters(
         "sys.argv",
         [
             "script.py",
-            "--channel", "https://youtube.com/channel/UC123",
-            "--start-date", "2023-01-01",
-            "--end-date", "2023-01-02",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--start-date",
+            "2023-01-01",
+            "--end-date",
+            "2023-01-02",
         ],
     ):
         with patch("os.makedirs") as mock_makedirs:
@@ -247,8 +247,10 @@ def test_main_with_invalid_date(mock_ytdl: Mock) -> None:
         "sys.argv",
         [
             "script.py",
-            "--channel", "https://youtube.com/channel/UC123",
-            "--start-date", "invalid-date",
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--start-date",
+            "invalid-date",
         ],
     ):
         with patch("sys.exit") as mock_exit:
@@ -271,8 +273,10 @@ def test_main_with_log_file(
         "sys.argv",
         [
             "script.py",
-            "--channel", "https://youtube.com/channel/UC123",
-            "--log", str(log_file),
+            "--channel",
+            "https://youtube.com/channel/UC123",
+            "--log",
+            str(log_file),
         ],
     ):
         with patch("os.makedirs") as mock_makedirs:
@@ -305,7 +309,7 @@ def test_main_with_invalid_entries(mock_ytdl: Mock, temp_output_dir) -> None:
     mock_ytdl.return_value.__enter__.return_value = mock_instance
     mock_instance.extract_info.return_value = {
         "title": "Test Channel",
-        "entries": None  # Invalid entries
+        "entries": None,  # Invalid entries
     }
 
     # Test with invalid entries
@@ -330,7 +334,7 @@ def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
                 "id": "video1",
                 # Missing upload_date to test skipping
             }
-        ]
+        ],
     }
 
     # Test with missing video data
@@ -350,3 +354,87 @@ def test_main_with_missing_video_data(mock_ytdl: Mock, temp_output_dir) -> None:
                 rows_arg = args[0]
                 assert isinstance(rows_arg, list)
                 assert len(rows_arg) == 0
+
+
+def test_channel_without_date_filters():
+    """Test that channel extraction without date filters returns non-empty results."""
+    channel_url = "https://www.youtube.com/@GregIsenberg"
+    info = get_channel_video_info(channel_url)
+    assert info is not None
+    assert "entries" in info
+    assert len(info["entries"]) > 0
+
+
+def test_channel_with_date_filters():
+    """Test that channel extraction with date filters returns correct results."""
+    channel_url = "https://www.youtube.com/@GregIsenberg"
+    start_date = "2024-05-01"
+    end_date = "2024-06-30"
+
+    # Get all videos
+    info = get_channel_video_info(channel_url)
+    assert info is not None
+    assert "entries" in info
+
+    # Filter videos by date range
+    filtered_videos = []
+    for entry in info["entries"]:
+        if entry.get("_type") != "video":
+            continue
+        upload_date = entry.get("upload_date")
+        if not upload_date:
+            continue
+        try:
+            video_date = datetime.strptime(upload_date, "%Y%m%d").date()
+            start = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            if start <= video_date <= end:
+                filtered_videos.append(entry)
+        except ValueError:
+            continue
+
+    # Verify that all filtered videos are within the date range
+    for video in filtered_videos:
+        upload_date = video.get("upload_date")
+        video_date = datetime.strptime(upload_date, "%Y%m%d").date()
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        assert start <= video_date <= end
+
+
+def test_channel_csv_generation():
+    """Test that CSV file is generated with correct content."""
+    channel_url = "https://www.youtube.com/@GregIsenberg"
+    output_file = "output/Greg_Isenberg_videos.csv"
+
+    # Run the main function
+    sys.argv = [
+        "channel_videos_to_csv.py",
+        "--channel",
+        channel_url,
+        "--output-dir",
+        "output",
+    ]
+    main()
+
+    # Verify CSV file exists and is not empty
+    assert os.path.exists(output_file)
+    assert os.path.getsize(output_file) > 0
+
+    # Read CSV and verify content
+    df = pd.read_csv(output_file)
+    assert len(df) > 0
+    assert all(
+        col in df.columns
+        for col in [
+            "id",
+            "title",
+            "upload_date",
+            "uploader",
+            "duration",
+            "view_count",
+            "description",
+            "url",
+            "has_captions",
+        ]
+    )
