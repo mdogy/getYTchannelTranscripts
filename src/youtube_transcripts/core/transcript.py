@@ -29,7 +29,6 @@ class TranscriptExtractor:
         """Clean up temporary files and directories."""
         if os.path.exists(self.temp_dir):
             try:
-                # FIX: Imported 'shutil' module to use rmtree.
                 shutil.rmtree(self.temp_dir)
             except Exception as e:
                 logger.error(f"Error cleaning up temp directory: {e}")
@@ -74,7 +73,6 @@ class TranscriptExtractor:
             if os.path.exists(expected_vtt_path):
                 return expected_vtt_path
             
-            # Fallback search in case of slight filename variations
             for filename in os.listdir(self.temp_dir):
                 if sanitized_id in filename and filename.endswith(".vtt"):
                     return os.path.join(self.temp_dir, filename)
@@ -90,7 +88,7 @@ class TranscriptExtractor:
             return None
 
     def _parse_vtt_file(self, vtt_path: str) -> List[Dict[str, Any]]:
-        """Parse a VTT file into a list of transcript segments."""
+        """Parse a VTT file into a list of transcript segments, cleaning up ASR artifacts."""
         segments = []
         pattern = re.compile(
             r"(\d*:?\d{2}:\d{2}\.\d{3})\s*-->\s*(\d*:?\d{2}:\d{2}\.\d{3}).*?\n(.*?)(?=\n\n|\Z)",
@@ -108,15 +106,32 @@ class TranscriptExtractor:
                         "start": self._vtt_timestamp_to_seconds(start_time),
                         "text": clean_text
                     })
+
+            # FIX: New, more robust logic to handle cumulative "rolling" captions from YouTube ASR.
+            if not segments:
+                return []
             
-            # Remove segments that are exact duplicates of the previous one.
-            unique_segments = []
+            # This algorithm merges consecutive captions that are continuations of each other.
+            clean_segments = []
             if segments:
-                unique_segments.append(segments[0])
+                # Start with the first segment
+                current_segment = segments[0]
                 for i in range(1, len(segments)):
-                    if segments[i]['text'] != segments[i-1]['text']:
-                        unique_segments.append(segments[i])
-            return unique_segments
+                    next_segment = segments[i]
+                    # If the next segment's text starts with the current one, it's a continuation.
+                    # We just update the text of our current segment to the fuller version.
+                    if next_segment['text'].startswith(current_segment['text']):
+                        current_segment['text'] = next_segment['text']
+                    # If it's not a continuation, the previous phrase is complete.
+                    # Add it to our clean list and start a new phrase.
+                    else:
+                        clean_segments.append(current_segment)
+                        current_segment = next_segment
+                # Add the last processed segment
+                clean_segments.append(current_segment)
+
+            return clean_segments
+
         except Exception as e:
             logger.error(f"Error parsing VTT file {vtt_path}: {e}")
             return []
@@ -160,7 +175,7 @@ class TranscriptExtractor:
             return video_info, None
 
         segments = self._parse_vtt_file(vtt_path)
-        logger.info(f"Extracted {len(segments)} segments for video {video_id}.")
+        logger.info(f"Extracted {len(segments)} clean segments for video {video_id}.")
         return video_info, segments
 
 
@@ -178,26 +193,26 @@ class TranscriptFormatter:
         if not segments:
             return ""
 
-        output = []
-        if format_type == "markdown":
-            for segment in segments:
-                text = segment.get("text", "").strip()
-                if not text:
-                    continue
+        output_lines = []
+        for segment in segments:
+            text = segment.get("text", "").strip()
+            if not text:
+                continue
+            
+            if format_type == "markdown":
                 if include_timestamps:
                     start_time = self._format_timestamp(segment.get("start", 0))
-                    output.append(f"**{start_time}**: {text}")
+                    output_lines.append(f"**{start_time}**: {text}")
                 else:
-                    output.append(text)
-            return "\n\n".join(output)
-        else: # Default to "raw" format (plain text)
-            for segment in segments:
-                text = segment.get("text", "").strip()
-                if not text:
-                    continue
+                    output_lines.append(text)
+            else:  # Default to "raw" format
                 if include_timestamps:
                     start_time = self._format_timestamp(segment.get("start", 0))
-                    output.append(f"[{start_time}] {text}")
+                    output_lines.append(f"[{start_time}] {text}")
                 else:
-                    output.append(text)
-            return "\n".join(output)
+                    output_lines.append(text)
+
+        # FIX: The joiner is now determined by the format, not just timestamps.
+        # Markdown looks better with double newlines, raw text with single newlines.
+        joiner = "\n\n" if format_type == "markdown" else "\n"
+        return joiner.join(output_lines)

@@ -35,7 +35,7 @@ def main() -> None:
     parser.add_argument(
         "-o",
         "--output",
-        required=True, # Making output required as per typical use case
+        required=True,
         help="Output CSV file path (e.g., output/channel_videos.csv).",
     )
     parser.add_argument(
@@ -43,7 +43,7 @@ def main() -> None:
         default="var/logs/app.log",
         help="Log file path (default: var/logs/app.log).",
     )
-    # FIX: Changed '-n' to '--limit' for clarity.
+    # FIX: The argument is now '--limit' to match the README documentation.
     parser.add_argument(
         "--limit",
         type=int,
@@ -53,26 +53,21 @@ def main() -> None:
     args = parser.parse_args()
 
     # --- Setup Directories and Logging ---
-    # Create the output directory if it doesn't exist.
     if args.output:
         output_dir = os.path.dirname(args.output)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
     
-    # Create the log directory if it doesn't exist.
     log_dir = os.path.dirname(args.log)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
 
-    # Now it's safe to set up file logging.
     setup_logging(args.log)
 
     try:
         # --- Main Logic ---
         logger.info(f"Fetching videos from channel: {args.channel}")
         
-        # 1. Get video list from the channel, applying the limit if specified.
-        # The 'limit' argument is passed to yt-dlp's 'playlistend' option.
         videos = get_channel_videos(args.channel, playlist_end=args.limit)
         if not videos:
             logger.warning("No videos found for the specified channel. Exiting.")
@@ -80,7 +75,6 @@ def main() -> None:
         
         logger.info(f"Found {len(videos)} videos before date filtering.")
 
-        # 2. Filter videos by the provided date range.
         filtered_videos = filter_videos_by_date(videos, args.start_date, args.end_date)
         if not filtered_videos:
             logger.warning("No videos found within the specified date range. Exiting.")
@@ -88,19 +82,15 @@ def main() -> None:
             
         logger.info(f"Found {len(filtered_videos)} videos after date filtering.")
 
-        # 3. Build the data rows for the CSV file.
         rows = [build_video_row(video) for video in filtered_videos]
 
-        # 4. Create a pandas DataFrame and save to CSV.
         df = pd.DataFrame(rows)
         
-        # Reorder columns for better readability in the CSV
         column_order = [
             "channel_name", "channel_id", "upload_date", "title", "video_id", 
             "video_url", "duration_seconds", "view_count", "like_count", "comment_count",
             "thumbnail_url", "description"
         ]
-        # Only include columns that actually exist in the dataframe
         df = df[[col for col in column_order if col in df.columns]]
 
         df.to_csv(args.output, index=False, encoding='utf-8')

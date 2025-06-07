@@ -1,15 +1,5 @@
-"""Core functionality for YouTube video metadata and transcript extraction."""
+# This file is intentionally left empty.
+# It marks the 'core' directory as a Python package,
+# allowing other scripts to import modules from it, like:
+# from youtube_transcripts.core.video_metadata import get_channel_videos
 
-from .video_metadata import get_video_details, parse_upload_date, build_video_row
-from .utils import setup_logging, get_unique_filename
-from .transcript import extract_transcript, format_transcript
-
-__all__ = [
-    "get_video_details",
-    "parse_upload_date",
-    "build_video_row",
-    "setup_logging",
-    "get_unique_filename",
-    "extract_transcript",
-    "format_transcript",
-]
