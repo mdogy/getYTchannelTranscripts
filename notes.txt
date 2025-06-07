@@ -1,0 +1,11 @@
+The documentation for yt-dlp can be found here:
+
+  https://github.com/yt-dlp/yt-dlp
+
+The captions are often not available. Google does generate auto captions and these can be downloaded by 
+yt-dlp but can not be captured. When captions are not available the captions should be downloaded automatically
+as a .vtt file. The script should wait for this download keeping track of whether it is a success or not. Then it
+should parse the .vtt file and print or save the transcript.
+
+
+
