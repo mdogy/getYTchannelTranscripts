@@ -87,9 +87,21 @@ class TranscriptExtractor:
             logger.error(f"An error occurred while running yt-dlp for {video_id}: {e}")
             return None
 
-    def _parse_vtt_file(self, vtt_path: str) -> List[Dict[str, Any]]:
-        """Parse a VTT file into a list of transcript segments, cleaning up ASR artifacts."""
-        segments = []
+    def _find_best_overlap(self, prev_text: str, next_text: str) -> int:
+        """Finds the length of the best suffix/prefix overlap between two strings."""
+        max_overlap = 0
+        for i in range(1, min(len(prev_text), len(next_text)) + 1):
+            # Check if the end of prev_text matches the start of next_text
+            if prev_text.endswith(next_text[:i]):
+                max_overlap = i
+        return max_overlap
+
+    def _parse_vtt_file(self, vtt_path: str, deduplicate: bool) -> List[Dict[str, Any]]:
+        """
+        Parse a VTT file into a list of transcript segments.
+        Optionally runs a robust stitching algorithm to clean up ASR artifacts.
+        """
+        raw_segments = []
         pattern = re.compile(
             r"(\d*:?\d{2}:\d{2}\.\d{3})\s*-->\s*(\d*:?\d{2}:\d{2}\.\d{3}).*?\n(.*?)(?=\n\n|\Z)",
             re.DOTALL
@@ -99,42 +111,65 @@ class TranscriptExtractor:
                 content = f.read()
             
             for match in pattern.finditer(content):
-                start_time, end_time, text_block = match.groups()
+                start_time, _, text_block = match.groups()
                 clean_text = re.sub(r'<[^>]+>', '', text_block).replace('\n', ' ').strip()
                 if clean_text:
-                    segments.append({
+                    raw_segments.append({
                         "start": self._vtt_timestamp_to_seconds(start_time),
                         "text": clean_text
                     })
 
-            # FIX: New, more robust logic to handle cumulative "rolling" captions from YouTube ASR.
-            if not segments:
+            if not raw_segments:
                 return []
             
-            # This algorithm merges consecutive captions that are continuations of each other.
-            clean_segments = []
-            if segments:
-                # Start with the first segment
-                current_segment = segments[0]
-                for i in range(1, len(segments)):
-                    next_segment = segments[i]
-                    # If the next segment's text starts with the current one, it's a continuation.
-                    # We just update the text of our current segment to the fuller version.
-                    if next_segment['text'].startswith(current_segment['text']):
-                        current_segment['text'] = next_segment['text']
-                    # If it's not a continuation, the previous phrase is complete.
-                    # Add it to our clean list and start a new phrase.
-                    else:
-                        clean_segments.append(current_segment)
-                        current_segment = next_segment
-                # Add the last processed segment
-                clean_segments.append(current_segment)
+            if not deduplicate:
+                logger.info("Deduplication is disabled. Returning raw transcript segments.")
+                return raw_segments
+            
+            # FINAL, CORRECTED ALGORITHM using variable overlap stitching.
+            final_segments = []
+            if raw_segments:
+                stitched_text = ""
+                stitched_start_time = 0
 
-            return clean_segments
+                for i, segment in enumerate(raw_segments):
+                    current_text = segment['text']
+                    
+                    if not stitched_text:
+                        stitched_text = current_text
+                        stitched_start_time = segment['start']
+                        continue
+
+                    overlap_len = self._find_best_overlap(stitched_text, current_text)
+                    
+                    # If there's a good overlap, append the new part.
+                    # A small overlap might be coincidental, so we check for a reasonable length
+                    # or if the new text fully contains the old one (a common ASR pattern).
+                    if overlap_len > 5 or current_text.startswith(stitched_text):
+                        new_part = current_text[overlap_len:]
+                        stitched_text += new_part
+                    # No significant overlap means a new sentence has started.
+                    else:
+                        final_segments.append({
+                            'start': stitched_start_time,
+                            'text': stitched_text
+                        })
+                        stitched_text = current_text
+                        stitched_start_time = segment['start']
+                
+                # Add the last stitched sentence
+                if stitched_text:
+                    final_segments.append({
+                        'start': stitched_start_time,
+                        'text': stitched_text
+                    })
+            
+            return final_segments
 
         except Exception as e:
             logger.error(f"Error parsing VTT file {vtt_path}: {e}")
             return []
+
 
     def _vtt_timestamp_to_seconds(self, timestamp: str) -> float:
         """Convert VTT timestamp (HH:MM:SS.mmm or MM:SS.mmm) to seconds."""
@@ -157,7 +192,7 @@ class TranscriptExtractor:
             logger.error(f"Error converting timestamp '{timestamp}': {e}")
             return 0.0
 
-    def extract(self, video_url: str) -> Tuple[Optional[Dict[str, Any]], Optional[List[Dict[str, Any]]]]:
+    def extract(self, video_url: str, deduplicate: bool = True) -> Tuple[Optional[Dict[str, Any]], Optional[List[Dict[str, Any]]]]:
         """
         Extracts video info and transcript data.
         Returns a tuple: (video_info, transcript_segments).
@@ -174,8 +209,8 @@ class TranscriptExtractor:
         if not vtt_path:
             return video_info, None
 
-        segments = self._parse_vtt_file(vtt_path)
-        logger.info(f"Extracted {len(segments)} clean segments for video {video_id}.")
+        segments = self._parse_vtt_file(vtt_path, deduplicate=deduplicate)
+        logger.info(f"Extracted {len(segments)} segments for video {video_id}.")
         return video_info, segments
 
 
@@ -199,20 +234,22 @@ class TranscriptFormatter:
             if not text:
                 continue
             
+            text = text.replace("[Music]", "").strip()
+            if not text:
+                continue
+
             if format_type == "markdown":
                 if include_timestamps:
                     start_time = self._format_timestamp(segment.get("start", 0))
                     output_lines.append(f"**{start_time}**: {text}")
                 else:
                     output_lines.append(text)
-            else:  # Default to "raw" format
+            else:
                 if include_timestamps:
                     start_time = self._format_timestamp(segment.get("start", 0))
                     output_lines.append(f"[{start_time}] {text}")
                 else:
                     output_lines.append(text)
 
-        # FIX: The joiner is now determined by the format, not just timestamps.
-        # Markdown looks better with double newlines, raw text with single newlines.
         joiner = "\n\n" if format_type == "markdown" else "\n"
         return joiner.join(output_lines)
