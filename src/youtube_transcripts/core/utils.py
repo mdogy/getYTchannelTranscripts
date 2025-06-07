@@ -16,7 +16,9 @@ def setup_logging(log_file: str) -> logging.Logger:
             logging.StreamHandler(sys.stderr),
         ],
     )
-    return logging.getLogger("yt_channel_metadata")
+    logger = logging.getLogger("yt_transcript")
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 def get_unique_filename(
