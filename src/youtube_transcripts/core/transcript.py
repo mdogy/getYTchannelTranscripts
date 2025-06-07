@@ -1,239 +1,203 @@
 """Core functionality for extracting and formatting YouTube video transcripts."""
 
 import os
+import shutil
 import subprocess
-import json
 import logging
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+import re
+from typing import Optional, List, Dict, Any, Tuple
 import yt_dlp
-from .utils import sanitize_filename
+
+# It's better to get the logger at the module level
+logger = logging.getLogger(__name__)
 
 class TranscriptExtractor:
-    """Class for extracting and formatting YouTube video transcripts."""
-    
+    """Class for extracting YouTube video info and transcript data."""
+
     def __init__(self, temp_dir: str = "temp"):
         """Initialize the transcript extractor."""
         self.temp_dir = temp_dir
         os.makedirs(self.temp_dir, exist_ok=True)
-        self.logger = logging.getLogger(__name__)
+        self._ydl = yt_dlp.YoutubeDL({"quiet": True, "skip_download": True})
+
 
     def __del__(self):
         """Clean up temporary files when object is destroyed."""
         self._cleanup_temp_files()
-        
+
     def _cleanup_temp_files(self) -> None:
         """Clean up temporary files and directories."""
         if os.path.exists(self.temp_dir):
             try:
+                # FIX: Imported 'shutil' module to use rmtree.
                 shutil.rmtree(self.temp_dir)
             except Exception as e:
                 logger.error(f"Error cleaning up temp directory: {e}")
 
-    def _get_video_id(self, video_url: str) -> str:
-        """Extract video ID from URL."""
+    def _get_video_info(self, video_url: str) -> Optional[Dict[str, Any]]:
+        """Get video metadata and ID in a single call."""
         try:
-            with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                return info.get("id", "")
+            info = self._ydl.extract_info(video_url, download=False)
+            return info if info else None
         except Exception as e:
-            self.logger.error(f"Error getting video ID: {e}")
-            raise
+            logger.error(f"Error getting video info for {video_url}: {e}")
+            return None
 
-    def _get_video_info(self, video_url: str) -> Dict[str, Any]:
-        """Get video metadata."""
+    def _download_auto_captions(self, video_url: str, video_id: str) -> Optional[str]:
+        """
+        Download auto-generated captions to a VTT file.
+        Returns the path to the downloaded file.
+        """
+        sanitized_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', video_id)
+        output_template = os.path.join(self.temp_dir, f"{sanitized_id}.%(ext)s")
+        
+        cmd = [
+            "yt-dlp",
+            "--write-auto-sub",
+            "--sub-lang", "en",
+            "--sub-format", "vtt",
+            "--skip-download",
+            "-o", output_template,
+            video_url
+        ]
+        
         try:
-            with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                return {
-                    "title": info.get("title", ""),
-                    "upload_date": info.get("upload_date", ""),
-                    "id": info.get("id", "")
-                }
-        except Exception as e:
-            self.logger.error(f"Error getting video info: {e}")
-            raise
-
-    def _download_auto_captions(self, video_url: str, video_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Download and parse auto-generated captions."""
-        try:
-            # Use subprocess to run yt-dlp
-            output_file = f"{self.temp_dir}/{video_id}.vtt"
-            
-            # Download auto-generated captions
-            cmd = [
-                "yt-dlp",
-                "--write-auto-sub",
-                "--sub-lang", "en",
-                "--skip-download",
-                "--sub-format", "vtt/best",
-                "--output", output_file,
-                video_url
-            ]
-            
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    self.logger.error(f"yt-dlp error: {result.stderr}")
-                    return None
-                    
-                if os.path.exists(output_file):
-                    return self._parse_vtt_file(output_file)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                if "no subtitles are available" in result.stderr.lower():
+                    logger.warning(f"No auto-generated English captions found for {video_id}.")
                 else:
-                    self.logger.error("VTT file not found after download")
-                    return None
-                    
-            except Exception as e:
-                self.logger.error(f"Error running yt-dlp: {e}")
+                    logger.error(f"yt-dlp failed for {video_id}: {result.stderr}")
                 return None
-                
-        except Exception as e:
-            self.logger.error(f"Error downloading auto-captions: {e}")
+            
+            expected_vtt_path = os.path.join(self.temp_dir, f"{sanitized_id}.en.vtt")
+            if os.path.exists(expected_vtt_path):
+                return expected_vtt_path
+            
+            # Fallback search in case of slight filename variations
+            for filename in os.listdir(self.temp_dir):
+                if sanitized_id in filename and filename.endswith(".vtt"):
+                    return os.path.join(self.temp_dir, filename)
+            
+            logger.error(f"VTT file for {video_id} not found after download.")
             return None
 
-    def _parse_vtt_file(self, vtt_path: str, include_timestamps: bool = False) -> Optional[List[Dict[str, Any]]]:
-        """Parse VTT file into transcript segments."""
-        try:
-            segments = []
-            with open(vtt_path, encoding="utf-8") as f:
-                # Skip header lines
-                while True:
-                    line = f.readline().strip()
-                    if not line or line == "WEBVTT":
-                        continue
-                    if line == "":
-                        break
-                
-                while True:
-                    line = f.readline().strip()
-                    if not line:
-                        break
-                    
-                    # Skip notes
-                    if line.startswith("NOTE"):
-                        while True:
-                            line = f.readline().strip()
-                            if not line:
-                                break
-                        continue
-                    
-                    # Get timestamp
-                    start, end = line.split("-->")
-                    start = start.strip()
-                    end = end.strip()
-                    
-                    # Get text
-                    text_lines = []
-                    while True:
-                        line = f.readline().strip()
-                        if not line:
-                            break
-                        text_lines.append(line)
-                    
-                    if text_lines:
-                        segments.append({
-                            "start": self._vtt_timestamp_to_seconds(start),
-                            "end": self._vtt_timestamp_to_seconds(end),
-                            "text": " ".join(text_lines).strip(),
-                        })
-            
-            if not segments:
-                return None
-            
-            # Remove duplicates
-            unique_segments = []
-            last_text = ""
-            for segment in segments:
-                text = segment["text"]
-                if text != last_text:
-                    unique_segments.append(segment)
-                last_text = text
-            
-            return unique_segments
-            
-        except Exception as e:
-            self.logger.error(f"Error parsing VTT file: {e}")
+        except FileNotFoundError:
+            logger.error("yt-dlp command not found. Is it installed and in your PATH?")
             return None
+        except Exception as e:
+            logger.error(f"An error occurred while running yt-dlp for {video_id}: {e}")
+            return None
+
+    def _parse_vtt_file(self, vtt_path: str) -> List[Dict[str, Any]]:
+        """Parse a VTT file into a list of transcript segments."""
+        segments = []
+        pattern = re.compile(
+            r"(\d*:?\d{2}:\d{2}\.\d{3})\s*-->\s*(\d*:?\d{2}:\d{2}\.\d{3}).*?\n(.*?)(?=\n\n|\Z)",
+            re.DOTALL
+        )
+        try:
+            with open(vtt_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            for match in pattern.finditer(content):
+                start_time, end_time, text_block = match.groups()
+                clean_text = re.sub(r'<[^>]+>', '', text_block).replace('\n', ' ').strip()
+                if clean_text:
+                    segments.append({
+                        "start": self._vtt_timestamp_to_seconds(start_time),
+                        "text": clean_text
+                    })
+            
+            # Remove segments that are exact duplicates of the previous one.
+            unique_segments = []
+            if segments:
+                unique_segments.append(segments[0])
+                for i in range(1, len(segments)):
+                    if segments[i]['text'] != segments[i-1]['text']:
+                        unique_segments.append(segments[i])
+            return unique_segments
+        except Exception as e:
+            logger.error(f"Error parsing VTT file {vtt_path}: {e}")
+            return []
 
     def _vtt_timestamp_to_seconds(self, timestamp: str) -> float:
-        """Convert VTT timestamp (HH:MM:SS.mmm) to seconds."""
+        """Convert VTT timestamp (HH:MM:SS.mmm or MM:SS.mmm) to seconds."""
         try:
-            parts = timestamp.split(":")
-            hours = int(parts[0])
-            minutes = int(parts[1])
-            seconds = float(parts[2].replace(",", "."))
-            return hours * 3600 + minutes * 60 + seconds
+            time_parts = timestamp.split('.')
+            main_time = time_parts[0]
+            milliseconds = int(time_parts[1])
+            
+            parts = main_time.split(':')
+            if len(parts) == 3:
+                h, m, s = [int(p) for p in parts]
+            elif len(parts) == 2:
+                h = 0
+                m, s = [int(p) for p in parts]
+            else:
+                raise ValueError(f"Invalid timestamp format: {timestamp}")
+
+            return (h * 3600 + m * 60 + s) + (milliseconds / 1000.0)
         except Exception as e:
-            self.logger.error(f"Error converting timestamp {timestamp}: {e}")
+            logger.error(f"Error converting timestamp '{timestamp}': {e}")
             return 0.0
 
-    def _format_transcript(self, transcript_data: List[Dict[str, Any]], format_type: str = "raw", include_timestamps: bool = True) -> str:
-        """Format transcript data into string."""
-        if not transcript_data:
+    def extract(self, video_url: str) -> Tuple[Optional[Dict[str, Any]], Optional[List[Dict[str, Any]]]]:
+        """
+        Extracts video info and transcript data.
+        Returns a tuple: (video_info, transcript_segments).
+        """
+        logger.info(f"Starting transcript extraction for {video_url}")
+        video_info = self._get_video_info(video_url)
+        if not video_info or not video_info.get("id"):
+            logger.error("Could not retrieve video information.")
+            return None, None
+
+        video_id = video_info["id"]
+        
+        vtt_path = self._download_auto_captions(video_url, video_id)
+        if not vtt_path:
+            return video_info, None
+
+        segments = self._parse_vtt_file(vtt_path)
+        logger.info(f"Extracted {len(segments)} segments for video {video_id}.")
+        return video_info, segments
+
+
+class TranscriptFormatter:
+    """Formats transcript data into different string formats."""
+    def _format_timestamp(self, seconds: float) -> str:
+        """Convert seconds to HH:MM:SS format."""
+        if seconds < 0: seconds = 0
+        hours, remainder = divmod(int(seconds), 3600)
+        minutes, secs = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def format(self, segments: List[Dict[str, Any]], format_type: str, include_timestamps: bool) -> str:
+        """Formats the transcript segments into the specified format."""
+        if not segments:
             return ""
-            
+
+        output = []
         if format_type == "markdown":
-            formatted = []
-            for segment in transcript_data:
+            for segment in segments:
                 text = segment.get("text", "").strip()
                 if not text:
                     continue
                 if include_timestamps:
-                    start = segment.get("start", 0)
-                    formatted.append(f"{self._format_timestamp(start)}: {text}")
+                    start_time = self._format_timestamp(segment.get("start", 0))
+                    output.append(f"**{start_time}**: {text}")
                 else:
-                    formatted.append(text)
-            return "\n".join(formatted).strip()
-        
-        # Default to raw format
-        formatted = []
-        previous_text = ""
-        for segment in transcript_data:
-            text = segment.get("text", "").strip()
-            if not text:
-                continue
-            if text == previous_text:
-                continue
-            formatted.append(text)
-            previous_text = text
-        return "\n".join(formatted).strip()
-
-    def _format_timestamp(self, seconds: float) -> str:
-        """Convert seconds to HH:MM:SS format."""
-        hours, remainder = divmod(int(seconds), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
-    def extract_transcript(self, video_url: str, format_type: str = "raw", include_timestamps: bool = True) -> str:
-        """Extract transcript from YouTube video."""
-        try:
-            video_id = self._get_video_id(video_url)
-            video_info = self._get_video_info(video_url)
-            
-            # Try to download auto-generated captions
-            transcript_data = self._download_auto_captions(video_url, video_id)
-            
-            if transcript_data:
-                transcript = self._format_transcript(transcript_data, format_type, include_timestamps)
-                return transcript
-            else:
-                return "No transcript available"
-                
-        except Exception as e:
-            return f"Error: {str(e)}"
-
-def extract_transcript(video_url: str,
-                      format_type: str = "raw",
-                      include_timestamps: bool = True) -> str:
-    """Extract and format transcript from YouTube video.
-    
-    Args:
-        video_url: URL of the YouTube video
-        format_type: Format type ("raw" or "markdown")
-        include_timestamps: Whether to include timestamps
-        
-    Returns:
-        Formatted transcript string
-    """
-    extractor = TranscriptExtractor()
-    return extractor.extract_transcript(video_url, format_type, include_timestamps)
+                    output.append(text)
+            return "\n\n".join(output)
+        else: # Default to "raw" format (plain text)
+            for segment in segments:
+                text = segment.get("text", "").strip()
+                if not text:
+                    continue
+                if include_timestamps:
+                    start_time = self._format_timestamp(segment.get("start", 0))
+                    output.append(f"[{start_time}] {text}")
+                else:
+                    output.append(text)
+            return "\n".join(output)

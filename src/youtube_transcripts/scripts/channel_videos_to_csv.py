@@ -1,247 +1,114 @@
 #!/usr/bin/env python3
-"""Script to extract video metadata from YouTube channels and save to CSV."""
+"""Script to extract video metadata from a YouTube channel and save to a CSV file."""
 
-import yt_dlp  # type: ignore
 import pandas as pd
-from datetime import datetime, date
 import os
 import sys
 import argparse
 import logging
-from typing import Optional, Dict, Any, List
-
 from youtube_transcripts.core.video_metadata import (
+    get_channel_videos,
     build_video_row,
+    filter_videos_by_date,
 )
 from youtube_transcripts.core.utils import setup_logging
 
-# Create a module-level logger
-logger = logging.getLogger("yt_channel_metadata")
-
-
-def get_channel_video_info(channel_url: str) -> Optional[Dict[str, Any]]:
-    """
-    Extracts basic video information (IDs, titles, upload dates) from a YouTube channel.
-    Handles different URL formats.
-    """
-    # Clean up the URL
-    channel_url = channel_url.strip()
-    logger.info(f"Processing channel URL: {channel_url}")
-
-    # Configure yt-dlp options for channel extraction
-    ydl_opts = {
-        "quiet": False,  # Enable output for debugging
-        "ignoreerrors": True,
-        "extract_flat": "in_playlist",  # Extract videos from playlists
-        "no_warnings": False,  # Show warnings for debugging
-        "skip_download": True,
-        "playlistend": 10,  # Start with just 10 videos for testing
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            logger.info("Attempting to extract channel info...")
-            info = ydl.extract_info(channel_url, download=False)
-
-            if not info:
-                logger.error("No channel information returned")
-                return None
-
-            logger.info(f"Channel info keys: {info.keys()}")
-
-            # Process entries to flatten playlists
-            all_entries = []
-            entries = info.get("entries", [])
-            if not entries:
-                logger.error("No entries found in channel info")
-                return None
-
-            logger.info(f"Found {len(entries)} entries")
-
-            # Process each entry
-            for entry in entries:
-                if entry.get("_type") == "playlist" and "entries" in entry:
-                    logger.info(
-                        f"Processing playlist: {entry.get('title', 'unknown')} with "
-                        f"{len(entry['entries'])} videos"
-                    )
-                    all_entries.extend(entry["entries"])
-                else:
-                    all_entries.append(entry)
-
-            # Update info with flattened entries
-            info["entries"] = all_entries
-            logger.info(
-                f"Total videos found after flattening playlists: {len(all_entries)}"
-            )
-
-            # Log first entry details for debugging
-            if all_entries:
-                first_entry = all_entries[0]
-                logger.info(f"First entry keys: {first_entry.keys()}")
-                logger.info(f"First entry data: {first_entry}")
-
-            return dict(info)  # Convert to dict to ensure type safety
-
-    except Exception as e:
-        logger.error(f"Error extracting channel info: {str(e)}")
-        return None
-
-
-def filter_video_by_date(video_date: date, args: argparse.Namespace) -> bool:
-    """Filter videos by date range."""
-    if args.start_date:
-        try:
-            start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-            if video_date < start_date:
-                return False
-        except ValueError:
-            logger.error(
-                f"Invalid start date format: {args.start_date}. Use YYYY-MM-DD"
-            )
-            return False
-    if args.end_date:
-        try:
-            end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
-            if video_date > end_date:
-                return False
-        except ValueError:
-            logger.error(f"Invalid end date format: {args.end_date}. Use YYYY-MM-DD")
-            return False
-    return True
-
-
-def filter_and_build_rows(
-    entries: List[Dict[str, Any]], channel_info: Dict[str, Any]
-) -> List[Dict[str, Any]]:
-    """Filter entries and build rows for CSV output."""
-    logger.info(f"Starting to process {len(entries)} entries")
-    rows = []
-
-    for entry in entries:
-        logger.info(
-            f"Processing entry type: {entry.get('_type', 'unknown')}, "
-            f"id: {entry.get('id', 'unknown')}"
-        )
-
-        # Skip non-video entries
-        if entry.get("_type") != "url" or entry.get("ie_key") != "Youtube":
-            logger.info(f"Skipping non-video entry: {entry.get('_type', 'unknown')}")
-            continue
-
-        # Build row for video entry
-        row = build_video_row(entry, channel_info)
-        if row:
-            rows.append(row)
-            logger.info(f"Successfully added video: {row.get('title', 'unknown')}")
-
-    logger.info(f"Successfully processed {len(rows)} videos")
-    return rows
-
+# It's standard practice to get the logger at the top level of the module.
+logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Main function to process channel videos and save to CSV."""
     parser = argparse.ArgumentParser(
-        description="Extract video information from a YouTube channel and save to CSV"
+        description="Extract video information from a YouTube channel and save to CSV."
     )
     parser.add_argument(
         "--channel",
         required=True,
-        help="YouTube channel URL (e.g., https://youtube.com/channel/UC...)",
+        help="YouTube channel URL (e.g., https://www.youtube.com/@MrBeast)",
     )
     parser.add_argument(
-        "--start-date", help="Start date for filtering videos (YYYY-MM-DD)"
+        "--start-date", help="Filter videos published on or after this date (YYYY-MM-DD)."
     )
-    parser.add_argument("--end-date", help="End date for filtering videos (YYYY-MM-DD)")
+    parser.add_argument(
+        "--end-date", help="Filter videos published on or before this date (YYYY-MM-DD)."
+    )
     parser.add_argument(
         "-o",
         "--output",
-        help="Output file path. If not specified, output goes to stdout",
+        required=True, # Making output required as per typical use case
+        help="Output CSV file path (e.g., output/channel_videos.csv).",
     )
     parser.add_argument(
         "--log",
         default="var/logs/app.log",
-        help="Log file path (default: var/logs/app.log)",
+        help="Log file path (default: var/logs/app.log).",
     )
+    # FIX: Changed '-n' to '--limit' for clarity.
     parser.add_argument(
-        "-n",
-        "--row-limit",
+        "--limit",
         type=int,
-        default=5,
-        help="Maximum number of videos to process (default: 5)",
+        default=None, # Default to no limit
+        help="Maximum number of recent videos to process. Processes all if not set.",
     )
     args = parser.parse_args()
 
-    # Create all required directories first
+    # --- Setup Directories and Logging ---
+    # Create the output directory if it doesn't exist.
     if args.output:
         output_dir = os.path.dirname(args.output)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
-
+    
+    # Create the log directory if it doesn't exist.
     log_dir = os.path.dirname(args.log)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
 
-    # Set up logging after directories are created
-    logger = setup_logging(args.log)
+    # Now it's safe to set up file logging.
+    setup_logging(args.log)
 
     try:
-        # Validate date formats before proceeding
-        if args.start_date:
-            try:
-                datetime.strptime(args.start_date, "%Y-%m-%d")
-            except ValueError:
-                logger.error(
-                    f"Invalid start date format: {args.start_date}. Use YYYY-MM-DD"
-                )
-                sys.exit(1)
-        if args.end_date:
-            try:
-                datetime.strptime(args.end_date, "%Y-%m-%d")
-            except ValueError:
-                logger.error(
-                    f"Invalid end date format: {args.end_date}. Use YYYY-MM-DD"
-                )
-                sys.exit(1)
+        # --- Main Logic ---
+        logger.info(f"Fetching videos from channel: {args.channel}")
+        
+        # 1. Get video list from the channel, applying the limit if specified.
+        # The 'limit' argument is passed to yt-dlp's 'playlistend' option.
+        videos = get_channel_videos(args.channel, playlist_end=args.limit)
+        if not videos:
+            logger.warning("No videos found for the specified channel. Exiting.")
+            sys.exit(0)
+        
+        logger.info(f"Found {len(videos)} videos before date filtering.")
 
-        info = get_channel_video_info(args.channel)
-        if not info:
-            logger.error("No channel information returned")
-            sys.exit(1)
+        # 2. Filter videos by the provided date range.
+        filtered_videos = filter_videos_by_date(videos, args.start_date, args.end_date)
+        if not filtered_videos:
+            logger.warning("No videos found within the specified date range. Exiting.")
+            sys.exit(0)
+            
+        logger.info(f"Found {len(filtered_videos)} videos after date filtering.")
 
-        channel_name = info.get("title", "channel")
-        logger.info(f"Processing channel: {channel_name}")
-        entries = info.get("entries", [])
-        logger.info(f"Number of entries returned: {len(entries)}")
-        if entries:
-            logger.info(f"First entry: {entries[0]}")
-            if len(entries) > 1:
-                logger.info(f"Second entry: {entries[1]}")
-        if not entries:
-            logger.error("No video entries found in channel")
-            sys.exit(1)
+        # 3. Build the data rows for the CSV file.
+        rows = [build_video_row(video) for video in filtered_videos]
 
-        rows = filter_and_build_rows(entries, info)
-        if not rows:
-            logger.warning("No videos found matching criteria")
-            return
-
+        # 4. Create a pandas DataFrame and save to CSV.
         df = pd.DataFrame(rows)
+        
+        # Reorder columns for better readability in the CSV
+        column_order = [
+            "channel_name", "channel_id", "upload_date", "title", "video_id", 
+            "video_url", "duration_seconds", "view_count", "like_count", "comment_count",
+            "thumbnail_url", "description"
+        ]
+        # Only include columns that actually exist in the dataframe
+        df = df[[col for col in column_order if col in df.columns]]
 
-        if args.output:
-            df.to_csv(args.output, index=False)
-            logger.info(f"Saved {len(rows)} videos to {args.output}")
-        else:
-            df.to_csv(sys.stdout, index=False)
+        df.to_csv(args.output, index=False, encoding='utf-8')
+        logger.info(f"Successfully saved {len(df)} video records to {args.output}")
 
     except Exception as e:
-        logger.error(f"Error processing channel: {e}")
+        logger.critical(f"A critical error occurred: {e}", exc_info=True)
         sys.exit(1)
-    finally:
-        for handler in logger.handlers[:]:
-            handler.close()
-            logger.removeHandler(handler)
-
 
 if __name__ == "__main__":
     main()

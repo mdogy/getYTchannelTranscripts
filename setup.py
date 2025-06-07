@@ -1,14 +1,21 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="youtube-transcripts",
+    name="youtube_transcripts",
     version="0.1.0",
-    packages=find_packages(where="src"),
+    description="A tool to extract video metadata and transcripts from YouTube.",
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
+    author="Your Name", # You can change this
+    author_email="your.email@example.com", # And this
+    url="https://github.com/yourusername/getYTchannelTranscripts", # And this
     package_dir={"": "src"},
-    package_data={"youtube_transcripts": ["py.typed"]},
+    packages=find_packages(where="src"),
+    python_requires=">=3.8",
     install_requires=[
         "yt-dlp>=2023.12.30",
         "pandas>=2.1.0",
+        # Add other core dependencies here from your requirements.txt
     ],
     extras_require={
         "dev": [
@@ -20,11 +27,8 @@ setup(
             "mypy>=1.8.0",
             "types-python-dateutil>=2.8.19.14",
             "types-requests>=2.31.0.20240106",
-        ],
+        ]
     },
-    python_requires=">=3.8",
-    author="Michael",
-    description="A tool to extract YouTube channel video metadata and transcripts",
     entry_points={
         "console_scripts": [
             "channel-videos-to-csv=youtube_transcripts.scripts.channel_videos_to_csv:main",
@@ -32,13 +36,8 @@ setup(
         ],
     },
     classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
     ],
 )

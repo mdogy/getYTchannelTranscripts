@@ -1,133 +1,158 @@
 # YouTube Channel Video Metadata and Transcript Extractor
 
-A Python tool to extract video metadata from YouTube channels and transcripts from videos.
+A Python tool to extract video metadata from YouTube channels and auto-generated transcripts from individual videos, designed for data analysis workflows.
 
 ## Features
 
-- Extract video metadata from YouTube channels
-- Extract transcripts from YouTube videos
-- Filter videos by date range
-- Save results to CSV files or text/markdown
-- Support for timestamps in transcripts
-- Comprehensive test suite
-- Code quality checks with linting
+- Extract comprehensive video metadata from entire YouTube channels.
+- Extract auto-generated English transcripts from any YouTube video.
+- Filter a channel's videos by a specified date range.
+- Limit the number of recent videos to process from a channel.
+- Save channel metadata to a CSV file.
+- Save individual transcripts to clean text or markdown files.
+- Command-line option to include or exclude timestamps in transcripts.
+- Robust logging for troubleshooting.
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/getYTchannelTranscripts.git
-cd getYTchannelTranscripts
-```
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/yourusername/getYTchannelTranscripts.git
+    cd getYTchannelTranscripts
+    ```
 
-2. Create a virtual environment and install dependencies:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e ".[dev]"
-```
+2.  **Create and activate a virtual environment:**
+    ```bash
+    # For Unix/macOS
+    python3 -m venv venv
+    source venv/bin/activate
+
+    # For Windows
+    python -m venv venv
+    venv\Scripts\activate
+    ```
+
+3.  **Install the package in editable mode:**
+
+    This command uses the `setup.py` file to install the project and its dependencies, making the command-line scripts available in your environment. The `-e` flag means changes you make to the source code will take effect immediately without reinstalling.
+
+    ```bash
+    pip install -e .
+    ```
+
+4.  **(Optional) Install development dependencies:**
+    If you plan to run tests or contribute to the code, install the development dependencies.
+    ```bash
+    pip install -e ".[dev]"
+    ```
 
 ## Usage
 
 ### Extracting Channel Video Metadata
 
-Basic usage:
+The `channel-videos-to-csv` script fetches video data from a channel and saves it to a CSV file.
+
+**Basic usage:**
+*Note: The `--output` argument is required.*
 ```bash
-channel-videos-to-csv --channel "https://www.youtube.com/@ChannelName"
+channel-videos-to-csv --channel "https://www.youtube.com/@MrBeast" --output "output/mrbeast_videos.csv"
 ```
 
-With date filtering:
+**Limit to the 50 most recent videos:**
 ```bash
-channel-videos-to-csv --channel "https://www.youtube.com/@ChannelName" --start-date "2023-01-01" --end-date "2023-12-31"
+channel-videos-to-csv --channel "https://www.youtube.com/@MrBeast" --limit 50 --output "output/mrbeast_latest_50.csv"
 ```
 
-Get videos from the past year with all metadata:
+**Get videos from a specific date range:**
 ```bash
-# Calculate dates for the past year
 channel-videos-to-csv \
-  --channel "https://www.youtube.com/@ChannelName" \
-  --start-date "$(date -v-1y +%Y-%m-%d)" \
-  --end-date "$(date +%Y-%m-%d)" \
-  --output "output/channel_videos_past_year.csv" \
-  --log "var/logs/run.log"
+  --channel "https://www.youtube.com/@lexfridman" \
+  --start-date "2023-01-01" \
+  --end-date "2023-03-31" \
+  --output "output/lex_q1_2023.csv"
 ```
 
-### Extracting Video Transcripts
+### Extracting a Video Transcript
 
-Basic usage (outputs to stdout):
+The `extract-video-transcript` script downloads the auto-generated transcript for a single video.
+
+**Basic usage:**
+*This saves the transcript with timestamps to a generated filename in the `output/` directory.*
 ```bash
-extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
+extract-video-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
-Save to file:
+**Save to a specific file without timestamps:**
 ```bash
-extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID" -o output/transcript.txt
+extract-video-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --no-timestamps -o "output/my_transcript.txt"
 ```
 
-Save as markdown with timestamps:
+**Save as Markdown with timestamps:**
 ```bash
-extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --format markdown -o output/transcript.md
-```
-
-Save without timestamps:
-```bash
-extract-video-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --no-timestamps -o output/transcript.txt
+extract-video-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --format markdown -o "output/my_transcript.md"
 ```
 
 ## Development
 
+The project includes a comprehensive test suite and linting configuration.
+
 ### Running Tests and Linting
 
-The project includes a comprehensive test suite and linting configuration. To run all checks:
+To run all checks (requires development dependencies):
 
 ```bash
-./run_tests.sh
-```
+# Run flake8 for code style checking
+flake8 src tests
 
-This will:
-1. Run flake8 for code style checking
-2. Run black for code formatting
-3. Run mypy for type checking
-4. Run pytest for unit tests
+# Run black to format code
+black src tests
 
-All output is saved to the `output` directory:
-- `output/flake8.log`: Flake8 output
-- `output/black.log`: Black formatting output
-- `output/mypy.log`: Mypy type checking output
-- `output/pytest.log`: Test output
-- `output/test-results.xml`: Test results in JUnit XML format
-- `output/test.log`: Test logging output
+# Run mypy for static type checking
+mypy src
 
-### Manual Testing
-
-To run individual checks:
-
-```bash
-# Run flake8
-flake8 .
-
-# Run black
-black .
-
-# Run mypy
-mypy .
-
-# Run pytest
+# Run pytest for unit tests
 pytest
 ```
 
 ## Logging
 
-The application uses Python's logging module with the following configuration:
-- Console output: INFO level and above
-- File output: DEBUG level and above
-- Error log: ERROR level and above
+Log files are stored in the `var/logs` directory by default. You can specify a different log file with the `--log` argument in any script.
 
-Log files are stored in the `var/logs` directory:
-- `var/logs/app.log`: General application logs
-- `var/logs/error.log`: Error logs
-- `var/logs/run.log`: Runtime logs (when --log is specified)
+-   `var/logs/app.log`: Default application log file.
 
 ## License
 
 MIT License
+YouTube Channel Video Metadata and Transcript ExtractorA Python tool to extract video metadata from YouTube channels and auto-generated transcripts from individual videos, designed for data analysis workflows.FeaturesExtract comprehensive video metadata from entire YouTube channels.Extract auto-generated English transcripts from any YouTube video.Filter a channel's videos by a specified date range.Limit the number of recent videos to process from a channel.Save channel metadata to a CSV file.Save individual transcripts to clean text or markdown files.Command-line option to include or exclude timestamps in transcripts.Robust logging for troubleshooting.InstallationClone the repository:git clone [https://github.com/yourusername/getYTchannelTranscripts.git](https://github.com/yourusername/getYTchannelTranscripts.git)
+cd getYTchannelTranscripts
+Create and activate a virtual environment:# For Unix/macOS
+python3 -m venv venv
+source venv/bin/activate
+
+# For Windows
+python -m venv venv
+venv\Scripts\activate
+Install the package in editable mode:This command uses the setup.py file to install the project and its dependencies, making the command-line scripts available in your environment. The -e flag means changes you make to the source code will take effect immediately without reinstalling.pip install -e .
+(Optional) Install development dependencies:If you plan to run tests or contribute to the code, install the development dependencies.pip install -e ".[dev]"
+UsageExtracting Channel Video MetadataThe channel-videos-to-csv script fetches video data from a channel and saves it to a CSV file.Basic usage:Note: The --output argument is required.channel-videos-to-csv --channel "[https://www.youtube.com/@MrBeast](https://www.youtube.com/@MrBeast)" --output "output/mrbeast_videos.csv"
+Limit to the 50 most recent videos:channel-videos-to-csv --channel "[https://www.youtube.com/@MrBeast](https://www.youtube.com/@MrBeast)" --limit 50 --output "output/mrbeast_latest_50.csv"
+Get videos from a specific date range:channel-videos-to-csv \
+  --channel "[https://www.youtube.com/@lexfridman](https://www.youtube.com/@lexfridman)" \
+  --start-date "2023-01-01" \
+  --end-date "2023-03-31" \
+  --output "output/lex_q1_2023.csv"
+Extracting a Video TranscriptThe extract-video-transcript script downloads the auto-generated transcript for a single video.Basic usage:This saves the transcript with timestamps to a generated filename in the output/ directory.extract-video-transcript "[https://www.youtube.com/watch?v=dQw4w9WgXcQ](https://www.youtube.com/watch?v=dQw4w9WgXcQ)"
+Save to a specific file without timestamps:extract-video-transcript "[https://www.youtube.com/watch?v=dQw4w9WgXcQ](https://www.youtube.com/watch?v=dQw4w9WgXcQ)" --no-timestamps -o "output/my_transcript.txt"
+Save as Markdown with timestamps:extract-video-transcript "[https://www.youtube.com/watch?v=dQw4w9WgXcQ](https://www.youtube.com/watch?v=dQw4w9WgXcQ)" --format markdown -o "output/my_transcript.md"
+DevelopmentThe project includes a comprehensive test suite and linting configuration.Running Tests and LintingTo run all checks (requires development dependencies):# Run flake8 for code style checking
+flake8 src tests
+
+# Run black to format code
+black src tests
+
+# Run mypy for static type checking
+mypy src
+
+# Run pytest for unit tests
+pytest
+LoggingLog files are stored in the var/logs directory by default. You can specify a different log file with the --log argument in any script.var/logs/app.log: Default application log file.LicenseMIT License
