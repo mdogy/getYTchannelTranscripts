@@ -9,58 +9,57 @@ logger = logging.getLogger(__name__)
 
 
 def get_channel_videos(
-    channel_url: str, playlist_end: Optional[int] = 5
+    channel_url: str, playlist_end: Optional[int] = 5, ydl: Optional[Any] = None
 ) -> List[Dict[str, Any]]:
     """
     Extracts all video entries from a YouTube channel.
-    
+
     Args:
         channel_url: The URL of the YouTube channel.
         playlist_end: Optional limit on the number of videos to retrieve.
-    
+
     Returns:
         A list of video information dictionaries.
     """
     logger.info(f"Attempting to extract video info from channel: {channel_url}")
 
-    # FIX: Removed the hardcoded 'playlistend' limit from the options.
-    # The script should control this, not the core library function.
-    ydl_opts = {
+    ydl_opts: Dict[str, Any] = {
         "quiet": True,
         "ignoreerrors": True,
-        "extract_flat": False,  # Change to False to get detailed video info
+        "extract_flat": False,
         "skip_download": True,
     }
 
     if playlist_end and playlist_end > 0:
-        ydl_opts['playlistend'] = playlist_end
-    if channel_url.startswith("https://www.youtube.com/@") and "/videos" not in channel_url:
+        ydl_opts["playlistend"] = playlist_end
+    if (
+        channel_url.startswith("https://www.youtube.com/@")
+        and "/videos" not in channel_url
+    ):
         channel_url = channel_url.rstrip("/") + "/videos"
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # yt-dlp handles various channel URL formats automatically
-            info = ydl.extract_info(channel_url, download=False)
+    if ydl is None:
+        ydl = yt_dlp.YoutubeDL(ydl_opts)
 
-            if not info or "entries" not in info:
-                logger.error(f"Could not retrieve video entries for channel {channel_url}.")
-                return []
-            
-            # The 'entries' key contains a list of videos
-            import re
-            video_id_pattern = re.compile(r'^[A-Za-z0-9_-]{11}$')
-            raw_videos = info.get("entries", [])
-            filtered_videos = []
-            for v in raw_videos:
-                vid = v.get("id") or v.get("videoId")
-                if vid and video_id_pattern.match(vid):
-                    v["id"] = vid
-                    filtered_videos.append(v)
-            return filtered_videos
+    info = ydl.extract_info(channel_url, download=False)
+    print(f"info in get_channel_videos: {info}")
 
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while fetching channel videos: {e}")
+    if not info or "entries" not in info:
+        logger.error(f"Could not retrieve video entries for channel {channel_url}.")
         return []
+
+    import re
+
+    video_id_pattern = re.compile(r"^[A-Za-z0-9_-]{11}$")
+    raw_videos = info.get("entries", [])
+    filtered_videos = []
+    for v in raw_videos:
+        vid = v.get("id") or v.get("videoId")
+        if vid and video_id_pattern.match(vid):
+            v["id"] = vid
+            filtered_videos.append(v)
+    print(f"filtered_videos: {filtered_videos}")
+    return filtered_videos
 
 
 def build_video_row(video_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,9 +78,8 @@ def build_video_row(video_info: Dict[str, Any]) -> Dict[str, Any]:
             logger.warning(
                 f"Could not parse upload date '{upload_date_str}' for video {video_info.get('id')}"
             )
-            upload_date = upload_date_str  # Keep original if parsing fails
+            upload_date = upload_date_str
 
-    # Simplified row construction
     row = {
         "channel_id": video_info.get("channel_id"),
         "channel_name": video_info.get("uploader"),
@@ -104,12 +102,12 @@ def filter_videos_by_date(
 ) -> List[Dict[str, Any]]:
     """
     Filters a list of videos to be within a specified date range.
-    
+
     Args:
         videos: A list of video info dictionaries.
         start_date: The start date in 'YYYY-MM-DD' format.
         end_date: The end date in 'YYYY-MM-DD' format.
-        
+
     Returns:
         A list of filtered video info dictionaries.
     """
@@ -137,8 +135,6 @@ def filter_videos_by_date(
                 f"Could not parse date '{upload_date_str}' for video {video.get('id')}. "
                 "Skipping date filter for this item."
             )
-            # Decide if you want to include items with unparseable dates
-            # For now, we skip them if a date filter is active.
             continue
-            
+
     return filtered_videos

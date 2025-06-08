@@ -1,166 +1,113 @@
-"""Tests for transcript extraction and formatting functionality."""
-
 import pytest
 from unittest.mock import Mock, patch
-import logging
-import os
-import sys
-from typing import Dict, Any, List
-
 from youtube_transcripts.core.transcript import (
-    extract_transcript,
-    format_timestamp,
-    format_transcript,
+    TranscriptExtractor,
+    TranscriptFormatter,
 )
-
-
-@pytest.fixture(autouse=True)
-def setup_logging_fixture():
-    os.makedirs("var/logs", exist_ok=True)
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler("var/logs/test.log"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    yield
-    for handler in logging.getLogger().handlers[:]:
-        handler.close()
-        logging.getLogger().removeHandler(handler)
 
 
 @pytest.fixture
 def mock_ytdl():
+    """Mock the yt_dlp.YoutubeDL class."""
     with patch("yt_dlp.YoutubeDL") as mock:
         yield mock
 
 
 @pytest.fixture
-def sample_transcript() -> List[Dict[str, Any]]:
+def sample_segments():
+    """Return a list of sample transcript segments."""
     return [
-        {
-            "text": "Hello, welcome to this video.",
-            "start": 0.0,
-            "end": 5.0,
-        },
-        {
-            "text": "Today we'll be discussing Python programming.",
-            "start": 5.0,
-            "end": 10.0,
-        },
-        {
-            "text": "Let's get started!",
-            "start": 10.0,
-            "end": 15.0,
-        },
+        {"start": 0.0, "text": "Hello world."},
+        {"start": 5.0, "text": "This is a test."},
     ]
 
 
-def test_format_timestamp():
-    """Test timestamp formatting."""
-    assert format_timestamp(0) == "0:00:00"
-    assert format_timestamp(61) == "0:01:01"
-    assert format_timestamp(3661) == "1:01:01"
+class TestTranscriptExtractor:
+    """Tests for the TranscriptExtractor class."""
 
-
-def test_format_transcript_text_with_timestamps(sample_transcript):
-    """Test formatting transcript as text with timestamps."""
-    expected = (
-        "0:00:00 Hello, welcome to this video.\n"
-        "0:00:05 Today we'll be discussing Python programming.\n"
-        "0:00:10 Let's get started!"
-    )
-    result = format_transcript(
-        sample_transcript, include_timestamps=True, format="text"
-    )
-    assert result == expected
-
-
-def test_format_transcript_text_without_timestamps(sample_transcript):
-    """Test formatting transcript as text without timestamps."""
-    expected = (
-        "Hello, welcome to this video.\n"
-        "Today we'll be discussing Python programming.\n"
-        "Let's get started!"
-    )
-    result = format_transcript(
-        sample_transcript, include_timestamps=False, format="text"
-    )
-    assert result == expected
-
-
-def test_format_transcript_markdown_with_timestamps(sample_transcript):
-    """Test formatting transcript as markdown with timestamps."""
-    expected = (
-        "[0:00:00] Hello, welcome to this video.\n\n"
-        "[0:00:05] Today we'll be discussing Python programming.\n\n"
-        "[0:00:10] Let's get started!"
-    )
-    result = format_transcript(
-        sample_transcript, include_timestamps=True, format="markdown"
-    )
-    assert result == expected
-
-
-def test_format_transcript_markdown_without_timestamps(sample_transcript):
-    """Test formatting transcript as markdown without timestamps."""
-    expected = (
-        "Hello, welcome to this video.\n\n"
-        "Today we'll be discussing Python programming.\n\n"
-        "Let's get started!"
-    )
-    result = format_transcript(
-        sample_transcript, include_timestamps=False, format="markdown"
-    )
-    assert result == expected
-
-
-def test_extract_transcript(mock_ytdl):
-    """Test transcript extraction."""
-    mock_instance = Mock()
-    mock_ytdl.return_value.__enter__.return_value = mock_instance
-    mock_instance.extract_info.return_value = {
-        "subtitles": {
-            "en": [
-                {
-                    "data": [
-                        {
-                            "start": 0.0,
-                            "end": 5.0,
-                            "text": "Test transcript",
-                        }
-                    ]
-                }
-            ]
+    @patch("subprocess.run")
+    @patch("os.path.exists", return_value=True)
+    @patch("builtins.open")
+    def test_extract_success(
+        self, mock_open, mock_exists, mock_run, mock_ytdl, sample_segments
+    ):
+        """Test successful transcript extraction."""
+        mock_instance = mock_ytdl.return_value
+        mock_instance.extract_info.return_value = {
+            "id": "test_video",
+            "title": "Test Video",
         }
-    }
+        mock_run.return_value = Mock(returncode=0, stderr="")
+        vtt_content = (
+            "00:00:00.000 --> 00:00:05.000\nHello world.\n\n"
+            "00:00:05.000 --> 00:00:10.000\nThis is a test."
+        )
+        mock_open.return_value.__enter__.return_value.read.return_value = vtt_content
 
-    result = extract_transcript("https://youtube.com/watch?v=test")
-    assert result is not None
-    assert len(result) == 1
-    assert result[0]["text"] == "Test transcript"
+        extractor = TranscriptExtractor()
+        video_info, segments = extractor.extract("some_url")
+
+        assert video_info["id"] == "test_video"
+        assert len(segments) == 2
+        assert segments[0]["text"] == "Hello world."
+
+    def test_extract_no_info(self, mock_ytdl):
+        """Test extraction when no video info is returned."""
+        mock_instance = mock_ytdl.return_value
+        mock_instance.extract_info.return_value = None
+
+        extractor = TranscriptExtractor()
+        video_info, segments = extractor.extract("some_url")
+
+        assert video_info is None
+        assert segments is None
+
+    @patch("subprocess.run")
+    def test_extract_no_captions(self, mock_run, mock_ytdl):
+        """Test extraction when no captions are available."""
+        mock_instance = mock_ytdl.return_value
+        mock_instance.extract_info.return_value = {
+            "id": "test_video",
+            "title": "Test Video",
+        }
+        mock_run.return_value = Mock(
+            returncode=1, stderr="no subtitles are available"
+        )
+
+        extractor = TranscriptExtractor()
+        video_info, segments = extractor.extract("some_url")
+
+        assert video_info["id"] == "test_video"
+        assert segments is None
 
 
-def test_extract_transcript_no_captions(mock_ytdl):
-    """Test transcript extraction when no captions are available."""
-    mock_instance = Mock()
-    mock_ytdl.return_value.__enter__.return_value = mock_instance
-    mock_instance.extract_info.return_value = {
-        "subtitles": {},
-        "automatic_captions": {},
-    }
+class TestTranscriptFormatter:
+    """Tests for the TranscriptFormatter class."""
 
-    result = extract_transcript("https://youtube.com/watch?v=test")
-    assert result is None
+    def test_format_raw_with_timestamps(self, sample_segments):
+        """Test formatting as raw text with timestamps."""
+        formatter = TranscriptFormatter()
+        result = formatter.format(sample_segments, "raw", True)
+        expected = "[00:00:00] Hello world.\n[00:00:05] This is a test."
+        assert result == expected
 
+    def test_format_raw_without_timestamps(self, sample_segments):
+        """Test formatting as raw text without timestamps."""
+        formatter = TranscriptFormatter()
+        result = formatter.format(sample_segments, "raw", False)
+        expected = "Hello world.\nThis is a test."
+        assert result == expected
 
-def test_extract_transcript_error(mock_ytdl):
-    """Test transcript extraction error handling."""
-    mock_instance = Mock()
-    mock_ytdl.return_value.__enter__.return_value = mock_instance
-    mock_instance.extract_info.side_effect = Exception("Test error")
+    def test_format_markdown_with_timestamps(self, sample_segments):
+        """Test formatting as markdown with timestamps."""
+        formatter = TranscriptFormatter()
+        result = formatter.format(sample_segments, "markdown", True)
+        expected = "**00:00:00**: Hello world.\n\n**00:00:05**: This is a test."
+        assert result == expected
 
-    result = extract_transcript("https://youtube.com/watch?v=test")
-    assert result is None
+    def test_format_markdown_without_timestamps(self, sample_segments):
+        """Test formatting as markdown without timestamps."""
+        formatter = TranscriptFormatter()
+        result = formatter.format(sample_segments, "markdown", False)
+        expected = "Hello world.\n\nThis is a test."
+        assert result == expected

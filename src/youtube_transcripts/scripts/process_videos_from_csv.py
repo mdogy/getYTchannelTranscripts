@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 def sanitize_filename(filename: str) -> str:
     """Removes invalid characters from a string so it can be used as a filename."""
-    s = re.sub(r'[^\w\s-]', '', filename)
-    s = re.sub(r'\s+', '-', s).strip()
+    s = re.sub(r"[^\w\s-]", "", filename)
+    s = re.sub(r"\s+", "-", s).strip()
     return s
 
 
@@ -27,6 +27,49 @@ def generate_unique_filename(title: str, video_id: str) -> str:
     """Generates a unique filename from a video title and its ID."""
     sanitized_title = sanitize_filename(title)
     return f"{sanitized_title}-{video_id}.txt"
+
+
+def process_video_row(
+    row: pd.Series,
+    extractor: TranscriptExtractor,
+    formatter: TranscriptFormatter,
+    output_dir: str,
+    should_deduplicate: bool,
+    include_timestamps: bool,
+) -> None:
+    """Processes a single video row from the DataFrame."""
+    video_url = row.get("video_url")
+    video_id = row.get("video_id")
+    title = row.get("title", "untitled")
+
+    if not video_url or pd.isna(video_url) or not video_id:
+        logger.warning("Skipping row due to missing video URL or ID.")
+        return
+
+    logger.info(f"Processing video: {title} ({video_url})")
+
+    try:
+        video_info, segments = extractor.extract(
+            video_url, deduplicate=should_deduplicate
+        )
+
+        if not video_info or not segments:
+            logger.error(f"No transcript could be extracted for {video_url}.")
+            return
+
+        transcript_text = formatter.format(segments, "raw", include_timestamps)
+        filename = generate_unique_filename(title, video_id)
+        output_path = os.path.join(output_dir, filename)
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(f"# {video_info.get('title', 'Video Transcript')}\n")
+            f.write(f"Source URL: {video_info.get('webpage_url', video_url)}\n\n")
+            f.write(transcript_text)
+
+        logger.info(f"Transcript for '{title}' saved to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to process video {video_url}: {e}", exc_info=True)
 
 
 def main() -> None:
@@ -37,21 +80,24 @@ def main() -> None:
     parser.add_argument(
         "--csv-file",
         required=True,
-        help="Input CSV file path (e.g., output/channel_videos.csv)."
+        help="Input CSV file path (e.g., output/channel_videos.csv).",
     )
     parser.add_argument(
         "--output-dir",
-        help="Directory to save transcript files. Defaults to a folder named after the CSV file in the 'output' directory."
+        help=(
+            "Directory to save transcript files. Defaults to a folder named after "
+            "the CSV file in the 'output' directory."
+        ),
     )
     parser.add_argument(
         "--timestamps",
         action="store_true",
-        help="Include timestamps in the output. Default is to exclude them."
+        help="Include timestamps in the output. Default is to exclude them.",
     )
     parser.add_argument(
         "--no-dedupe",
         action="store_true",
-        help="Disable the experimental logic for removing duplicate/rolling captions."
+        help="Disable the experimental logic for removing duplicate/rolling captions.",
     )
     parser.add_argument(
         "--log",
@@ -68,14 +114,11 @@ def main() -> None:
         output_dir = os.path.join("output", f"{csv_filename}_transcripts")
 
     os.makedirs(output_dir, exist_ok=True)
-    
+
     log_dir = os.path.dirname(args.log)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
     setup_logging(args.log)
-
-    should_deduplicate = not args.no_dedupe
-    include_timestamps = args.timestamps
 
     try:
         df = pd.read_csv(args.csv_file)
@@ -84,37 +127,15 @@ def main() -> None:
         extractor = TranscriptExtractor()
         formatter = TranscriptFormatter()
 
-        for index, row in df.iterrows():
-            video_url = row.get("video_url")
-            video_id = row.get("video_id")
-            title = row.get("title", "untitled")
-
-            if not video_url or pd.isna(video_url) or not video_id:
-                logger.warning(f"Skipping row {index} due to missing video URL or ID.")
-                continue
-
-            logger.info(f"Processing video: {title} ({video_url})")
-
-            try:
-                video_info, segments = extractor.extract(video_url, deduplicate=should_deduplicate)
-
-                if not segments:
-                    logger.error(f"No transcript could be extracted for {video_url}.")
-                    continue
-
-                transcript_text = formatter.format(segments, "raw", include_timestamps)
-                filename = generate_unique_filename(title, video_id)
-                output_path = os.path.join(output_dir, filename)
-
-                with open(output_path, 'w', encoding='utf-8') as f:
-                    f.write(f"# {video_info.get('title', 'Video Transcript')}\n")
-                    f.write(f"Source URL: {video_info.get('webpage_url', video_url)}\n\n")
-                    f.write(transcript_text)
-
-                logger.info(f"Transcript for '{title}' saved to {output_path}")
-
-            except Exception as e:
-                logger.error(f"Failed to process video {video_url}: {e}", exc_info=True)
+        for _, row in df.iterrows():
+            process_video_row(
+                row,
+                extractor,
+                formatter,
+                output_dir,
+                not args.no_dedupe,
+                args.timestamps,
+            )
 
         logger.info("Finished processing all videos.")
 
