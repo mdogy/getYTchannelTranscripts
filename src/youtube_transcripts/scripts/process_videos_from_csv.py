@@ -10,7 +10,6 @@ import argparse
 import logging
 import pandas as pd
 import re
-import hashlib
 from youtube_transcripts.core.transcript import TranscriptExtractor, TranscriptFormatter
 from youtube_transcripts.core.utils import setup_logging
 
@@ -24,13 +23,10 @@ def sanitize_filename(filename: str) -> str:
     return s
 
 
-def generate_unique_filename(title: str) -> str:
-    """Generates a unique filename from a title and a hash."""
+def generate_unique_filename(title: str, video_id: str) -> str:
+    """Generates a unique filename from a video title and its ID."""
     sanitized_title = sanitize_filename(title)
-    # Use a short hash of the original title to ensure uniqueness
-    hash_object = hashlib.sha1(title.encode())
-    short_hash = hash_object.hexdigest()[:8]
-    return f"{sanitized_title}_{short_hash}.txt"
+    return f"{sanitized_title}-{video_id}.txt"
 
 
 def main() -> None:
@@ -45,8 +41,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default="output/transcripts",
-        help="Directory to save transcript files (default: output/transcripts)."
+        help="Directory to save transcript files. Defaults to a folder named after the CSV file in the 'output' directory."
     )
     parser.add_argument(
         "--timestamps",
@@ -66,7 +61,14 @@ def main() -> None:
     args = parser.parse_args()
 
     # --- Setup Directories and Logging ---
-    os.makedirs(args.output_dir, exist_ok=True)
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        csv_filename = os.path.splitext(os.path.basename(args.csv_file))[0]
+        output_dir = os.path.join("output", f"{csv_filename}_transcripts")
+
+    os.makedirs(output_dir, exist_ok=True)
+    
     log_dir = os.path.dirname(args.log)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
@@ -84,10 +86,11 @@ def main() -> None:
 
         for index, row in df.iterrows():
             video_url = row.get("video_url")
+            video_id = row.get("video_id")
             title = row.get("title", "untitled")
 
-            if not video_url or pd.isna(video_url):
-                logger.warning(f"Skipping row {index} due to missing video URL.")
+            if not video_url or pd.isna(video_url) or not video_id:
+                logger.warning(f"Skipping row {index} due to missing video URL or ID.")
                 continue
 
             logger.info(f"Processing video: {title} ({video_url})")
@@ -100,8 +103,8 @@ def main() -> None:
                     continue
 
                 transcript_text = formatter.format(segments, "raw", include_timestamps)
-                filename = generate_unique_filename(title)
-                output_path = os.path.join(args.output_dir, filename)
+                filename = generate_unique_filename(title, video_id)
+                output_path = os.path.join(output_dir, filename)
 
                 with open(output_path, 'w', encoding='utf-8') as f:
                     f.write(f"# {video_info.get('title', 'Video Transcript')}\n")
