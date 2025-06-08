@@ -7,7 +7,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_channel_videos(channel_url: str, playlist_end: Optional[int] = None) -> List[Dict[str, Any]]:
+
+def get_channel_videos(
+    channel_url: str, playlist_end: Optional[int] = None
+) -> List[Dict[str, Any]]:
     """
     Extracts all video entries from a YouTube channel.
     
@@ -25,7 +28,7 @@ def get_channel_videos(channel_url: str, playlist_end: Optional[int] = None) -> 
     ydl_opts = {
         "quiet": True,
         "ignoreerrors": True,
-        "extract_flat": "in_playlist", # Extracts info from all videos in channel/playlist
+        "extract_flat": True,  # List videos in the channel/playlist
         "skip_download": True,
     }
 
@@ -50,6 +53,7 @@ def get_channel_videos(channel_url: str, playlist_end: Optional[int] = None) -> 
         logger.error(f"An unexpected error occurred while fetching channel videos: {e}")
         return []
 
+
 def build_video_row(video_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     Builds a structured dictionary (row) for a single video.
@@ -59,10 +63,14 @@ def build_video_row(video_info: Dict[str, Any]) -> Dict[str, Any]:
     upload_date = None
     if upload_date_str:
         try:
-            upload_date = datetime.strptime(upload_date_str, "%Y%m%d").date().isoformat()
+            upload_date = (
+                datetime.strptime(upload_date_str, "%Y%m%d").date().isoformat()
+            )
         except (ValueError, TypeError):
-            logger.warning(f"Could not parse upload date '{upload_date_str}' for video {video_info.get('id')}")
-            upload_date = upload_date_str # Keep the original string if parsing fails
+            logger.warning(
+                f"Could not parse upload date '{upload_date_str}' for video {video_info.get('id')}"
+            )
+            upload_date = upload_date_str  # Keep original if parsing fails
 
     # Simplified row construction
     row = {
@@ -81,7 +89,10 @@ def build_video_row(video_info: Dict[str, Any]) -> Dict[str, Any]:
     }
     return row
 
-def filter_videos_by_date(videos: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]) -> List[Dict[str, Any]]:
+
+def filter_videos_by_date(
+    videos: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]
+) -> List[Dict[str, Any]]:
     """
     Filters a list of videos to be within a specified date range.
     
@@ -113,10 +124,12 @@ def filter_videos_by_date(videos: List[Dict[str, Any]], start_date: Optional[str
                 continue
             filtered_videos.append(video)
         except (ValueError, TypeError):
-            logger.warning(f"Could not parse date '{upload_date_str}' for video {video.get('id')}. Skipping date filter for this item.")
+            logger.warning(
+                f"Could not parse date '{upload_date_str}' for video {video.get('id')}. "
+                "Skipping date filter for this item."
+            )
             # Decide if you want to include items with unparseable dates
             # For now, we skip them if a date filter is active.
             continue
             
     return filtered_videos
-
