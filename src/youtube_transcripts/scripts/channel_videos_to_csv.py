@@ -16,6 +16,7 @@ from youtube_transcripts.core.utils import setup_logging
 # It's standard practice to get the logger at the top level of the module.
 logger = logging.getLogger(__name__)
 
+  
 def main() -> None:
     """Main function to process channel videos and save to CSV."""
     parser = argparse.ArgumentParser(
@@ -67,6 +68,8 @@ def main() -> None:
     try:
         # --- Main Logic ---
         logger.info(f"Fetching videos from channel: {args.channel}")
+        if args.limit == -1:
+            logger.warning("Warning: No limit on number of videos. The script may run for a long time.")
         
         videos = get_channel_videos(args.channel, playlist_end=args.limit)
         if not videos:

@@ -34,6 +34,8 @@ def get_channel_videos(
 
     if playlist_end and playlist_end > 0:
         ydl_opts['playlistend'] = playlist_end
+    if channel_url.startswith("https://www.youtube.com/@") and "/videos" not in channel_url:
+        channel_url = channel_url.rstrip("/") + "/videos"
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -45,9 +47,16 @@ def get_channel_videos(
                 return []
             
             # The 'entries' key contains a list of videos
-            videos = info.get("entries", [])
-            # Filter out any potential None values that can occur with --ignoreerrors
-            return [v for v in videos if v]
+            import re
+            video_id_pattern = re.compile(r'^[A-Za-z0-9_-]{11}$')
+            raw_videos = info.get("entries", [])
+            filtered_videos = []
+            for v in raw_videos:
+                vid = v.get("id") or v.get("videoId")
+                if vid and video_id_pattern.match(vid):
+                    v["id"] = vid
+                    filtered_videos.append(v)
+            return filtered_videos
 
     except Exception as e:
         logger.error(f"An unexpected error occurred while fetching channel videos: {e}")

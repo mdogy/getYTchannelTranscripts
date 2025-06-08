@@ -57,6 +57,7 @@ The `channel-videos-to-csv` script fetches video data from a channel and saves i
 ```bash
 channel-videos-to-csv --channel "https://www.youtube.com/@MrBeast" --output "output/mrbeast_videos.csv"
 ```
+**Note:** Setting the `--limit` parameter to `-1` will retrieve all videos without limitation, which may result in a very long execution time.
 
 **Limit to the 50 most recent videos:**
 ```bash
