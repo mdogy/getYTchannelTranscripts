@@ -47,8 +47,8 @@ def main() -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        default=None, # Default to no limit
-        help="Maximum number of recent videos to process. Processes all if not set.",
+        default=5, # Default to five videos if not specified
+        help="Maximum number of recent videos to process. Processes 5 videos if not set.",
     )
     args = parser.parse_args()
 

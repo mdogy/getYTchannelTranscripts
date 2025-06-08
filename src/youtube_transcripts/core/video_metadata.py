@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_channel_videos(
-    channel_url: str, playlist_end: Optional[int] = None
+    channel_url: str, playlist_end: Optional[int] = 5
 ) -> List[Dict[str, Any]]:
     """
     Extracts all video entries from a YouTube channel.
@@ -28,11 +28,11 @@ def get_channel_videos(
     ydl_opts = {
         "quiet": True,
         "ignoreerrors": True,
-        "extract_flat": True,  # List videos in the channel/playlist
+        "extract_flat": False,  # Change to False to get detailed video info
         "skip_download": True,
     }
 
-    if playlist_end:
+    if playlist_end and playlist_end > 0:
         ydl_opts['playlistend'] = playlist_end
 
     try:
