@@ -9,7 +9,6 @@ import logging
 from youtube_transcripts.core.video_metadata import (
     get_channel_videos,
     build_video_row,
-    filter_videos_by_date,
 )
 from youtube_transcripts.core.utils import setup_logging
 
@@ -17,8 +16,8 @@ from youtube_transcripts.core.utils import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
-    """Main function to process channel videos and save to CSV."""
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Extract video information from a YouTube channel and save to CSV."
     )
@@ -53,9 +52,11 @@ def main() -> None:
         default=5,  # Default to five videos if not specified
         help="Maximum number of recent videos to process. Processes 5 videos if not set.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # --- Setup Directories and Logging ---
+
+def _setup_environment(args: argparse.Namespace) -> None:
+    """Set up directories and logging."""
     if args.output:
         output_dir = os.path.dirname(args.output)
         if output_dir:
@@ -67,51 +68,69 @@ def main() -> None:
 
     setup_logging(args.log)
 
-    try:
-        # --- Main Logic ---
-        logger.info(f"Fetching videos from channel: {args.channel}")
-        if args.limit == -1:
-            logger.warning(
-                "Warning: No limit on number of videos. The script may run for a long time."
-            )
 
-        videos = get_channel_videos(args.channel, playlist_end=args.limit)
-        if not videos:
-            logger.warning("No videos found for the specified channel. Exiting.")
-            sys.exit(0)
+def _process_videos(args: argparse.Namespace) -> None:
+    """Fetch, filter, and process videos, then save to CSV."""
+    logger.info(f"Fetching videos from channel: {args.channel}")
 
-        logger.info(f"Found {len(videos)} videos before date filtering.")
+    if args.limit == -1:
+        logger.warning(
+            "Warning: No limit on number of videos. The script may run for a long time."
+        )
 
-        filtered_videos = filter_videos_by_date(videos, args.start_date, args.end_date)
-        if not filtered_videos:
-            logger.warning("No videos found within the specified date range. Exiting.")
-            sys.exit(0)
+    column_order = [
+        "channel_name",
+        "channel_id",
+        "upload_date",
+        "title",
+        "video_id",
+        "video_url",
+        "duration_seconds",
+        "view_count",
+        "like_count",
+        "comment_count",
+        "thumbnail_url",
+        "description",
+    ]
 
-        logger.info(f"Found {len(filtered_videos)} videos after date filtering.")
+    # Write header to CSV file immediately
+    pd.DataFrame(columns=column_order).to_csv(
+        args.output, index=False, encoding="utf-8"
+    )
 
-        rows = [build_video_row(video) for video in filtered_videos]
+    video_iterator = get_channel_videos(
+        args.channel,
+        playlist_end=args.limit if args.limit > 0 else None,
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
 
-        df = pd.DataFrame(rows)
-
-        column_order = [
-            "channel_name",
-            "channel_id",
-            "upload_date",
-            "title",
-            "video_id",
-            "video_url",
-            "duration_seconds",
-            "view_count",
-            "like_count",
-            "comment_count",
-            "thumbnail_url",
-            "description",
-        ]
+    processed_count = 0
+    for video in video_iterator:
+        row = build_video_row(video)
+        df = pd.DataFrame([row])
         df = df[[col for col in column_order if col in df.columns]]
+        df.to_csv(args.output, mode="a", header=False, index=False, encoding="utf-8")
+        logger.info(f"Processed and saved video: {row.get('title')}")
+        processed_count += 1
 
-        df.to_csv(args.output, index=False, encoding="utf-8")
-        logger.info(f"Successfully saved {len(df)} video records to {args.output}")
+    if processed_count == 0:
+        logger.warning(
+            "No videos found for the specified channel and date range. Exiting."
+        )
+    else:
+        logger.info(
+            f"Successfully saved {processed_count} video records to {args.output}"
+        )
 
+
+def main() -> None:
+    """Main function to process channel videos and save to CSV."""
+    args = _parse_args()
+    _setup_environment(args)
+
+    try:
+        _process_videos(args)
     except Exception as e:
         logger.critical(f"A critical error occurred: {e}", exc_info=True)
         sys.exit(1)
