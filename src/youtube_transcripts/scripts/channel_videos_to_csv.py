@@ -6,11 +6,11 @@ import os
 import sys
 import argparse
 import logging
-from youtube_transcripts.core.video_metadata import (
+from ..core.video_metadata import (
     get_channel_videos,
     build_video_row,
 )
-from youtube_transcripts.core.utils import setup_logging
+from ..core.utils import setup_logging
 
 # It's standard practice to get the logger at the top level of the module.
 logger = logging.getLogger(__name__)

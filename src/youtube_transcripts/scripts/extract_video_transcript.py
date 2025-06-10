@@ -6,8 +6,8 @@ import sys
 import argparse
 import logging
 import re
-from youtube_transcripts.core.transcript import TranscriptExtractor, TranscriptFormatter
-from youtube_transcripts.core.utils import setup_logging
+from ..core.transcript import TranscriptExtractor, TranscriptFormatter
+from ..core.utils import setup_logging
 
 logger = logging.getLogger(__name__)
 

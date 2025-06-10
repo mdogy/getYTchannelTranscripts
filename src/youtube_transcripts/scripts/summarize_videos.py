@@ -6,6 +6,7 @@ import pandas as pd
 import yaml
 from dotenv import load_dotenv
 import google.generativeai as genai
+from ..core.utils import generate_unique_filename
 
 # --- Basic Setup ---
 logging.basicConfig(
@@ -58,6 +59,7 @@ def process_video(row, model, prompt_template, args):
     video_id = row.get("video_id")
     video_title = row.get("title", "No Title")
     video_description = row.get("description", "No Description")
+    csv_row_data = row.to_json(indent=2)
 
     if not video_id:
         logging.warning("Skipping row due to missing video_id.")
@@ -68,7 +70,8 @@ def process_video(row, model, prompt_template, args):
         logging.info(f"Summary for {video_id} already exists. Skipping.")
         return
 
-    transcript_path = os.path.join(args.transcripts_dir, f"{video_id}.txt")
+    transcript_filename = generate_unique_filename(video_title, video_id)
+    transcript_path = os.path.join(args.transcripts_dir, transcript_filename)
     if not os.path.exists(transcript_path):
         logging.error(
             f"Transcript for {video_id} not found at {transcript_path}. Skipping."
@@ -83,6 +86,7 @@ def process_video(row, model, prompt_template, args):
             video_title=video_title,
             video_description=video_description,
             transcript_text=transcript_text,
+            csv_row_data=csv_row_data,
         )
 
         response = model.generate_content(prompt)

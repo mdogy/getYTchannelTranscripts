@@ -2,6 +2,7 @@
 
 import sys
 import logging
+import re
 
 
 def setup_logging(log_file_path: str) -> None:
@@ -53,7 +54,14 @@ def setup_logging(log_file_path: str) -> None:
     logging.info("Logging configured successfully.")
 
 
-# NOTE: The get_unique_filename function was removed from here.
-# The logic for determining output filenames was moved directly into the
-# scripts that use them (e.g., extract_video_transcript.py) to make
-# the code's behavior more explicit and easier to follow.
+def sanitize_filename(filename: str) -> str:
+    """Removes invalid characters from a string so it can be used as a filename."""
+    s = re.sub(r"[^\w\s-]", "", filename)
+    s = re.sub(r"\s+", "-", s).strip()
+    return s
+
+
+def generate_unique_filename(title: str, video_id: str) -> str:
+    """Generates a unique filename from a video title and its ID."""
+    sanitized_title = sanitize_filename(title)
+    return f"{sanitized_title}-{video_id}.txt"

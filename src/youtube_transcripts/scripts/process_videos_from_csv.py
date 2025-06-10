@@ -9,24 +9,13 @@ import sys
 import argparse
 import logging
 import pandas as pd
-import re
-from youtube_transcripts.core.transcript import TranscriptExtractor, TranscriptFormatter
-from youtube_transcripts.core.utils import setup_logging
+from ..core.transcript import TranscriptExtractor, TranscriptFormatter
+from ..core.utils import (
+    setup_logging,
+    generate_unique_filename,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def sanitize_filename(filename: str) -> str:
-    """Removes invalid characters from a string so it can be used as a filename."""
-    s = re.sub(r"[^\w\s-]", "", filename)
-    s = re.sub(r"\s+", "-", s).strip()
-    return s
-
-
-def generate_unique_filename(title: str, video_id: str) -> str:
-    """Generates a unique filename from a video title and its ID."""
-    sanitized_title = sanitize_filename(title)
-    return f"{sanitized_title}-{video_id}.txt"
 
 
 def process_video_row(

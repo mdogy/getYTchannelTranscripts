@@ -6,16 +6,18 @@ setup(
     description="A tool to extract video metadata and transcripts from YouTube.",
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    author="Your Name",  # You can change this
-    author_email="your.email@example.com",  # And this
-    url="https://github.com/yourusername/getYTchannelTranscripts",  # And this
+    author="Your Name",
+    author_email="your.email@example.com",
+    url="https://github.com/yourusername/getYTchannelTranscripts",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     python_requires=">=3.8",
     install_requires=[
         "yt-dlp>=2023.12.30",
         "pandas>=2.1.0",
-        # Add other core dependencies here from your requirements.txt
+        "python-dotenv>=0.21.0",
+        "google-generativeai>=0.3.0",
+        "PyYAML>=6.0",
     ],
     extras_require={
         "dev": [
@@ -34,6 +36,7 @@ setup(
             "channel-videos-to-csv=youtube_transcripts.scripts.channel_videos_to_csv:main",
             "extract-video-transcript=youtube_transcripts.scripts.extract_video_transcript:main",
             "process-videos-from-csv=youtube_transcripts.scripts.process_videos_from_csv:main",
+            "summarize-videos=youtube_transcripts.scripts.summarize_videos:main",
         ],
     },
     classifiers=[

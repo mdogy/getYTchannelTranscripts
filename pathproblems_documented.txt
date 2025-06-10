@@ -1,0 +1,27 @@
+This file documents the failed attempts to resolve the `ModuleNotFoundError` when running the scripts in the `getYTchannelTranscripts` project.
+
+**Attempted Solutions:**
+
+1.  **`sys.path.insert` with relative paths:**
+    *   **Description:** Added `sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))` and `sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` to the top of the scripts.
+    *   **Result:** Failed. The relative paths were not consistently correct for all scripts, and the `ModuleNotFoundError` persisted.
+
+2.  **`pyproject.toml` with `package-dir`:**
+    *   **Description:** Created a `pyproject.toml` file and used `[tool.setuptools]` with `package-dir = {"" = "src"}`.
+    *   **Result:** Failed. This did not resolve the `ModuleNotFoundError`.
+
+3.  **`pyproject.toml` with `[tool.setuptools.packages.find]`:**
+    *   **Description:** Modified the `pyproject.toml` to use `[tool.setuptools.packages.find]` with `where = ["src"]`.
+    *   **Result:** Failed. This also did not resolve the `ModuleNotFoundError`.
+
+4.  **Adding `src/__init__.py`:**
+    *   **Description:** Added an `__init__.py` file to the `src` directory to explicitly mark it as a package.
+    *   **Result:** Failed. This did not solve the problem on its own.
+
+5.  **`setup.cfg`:**
+    *   **Description:** Created a `setup.cfg` file to define the project structure.
+    *   **Result:** Failed. This also did not resolve the `ModuleNotFoundError`.
+
+6.  **Relative imports:**
+    *   **Description:** Changed the imports in the scripts to be relative (e.g., `from ..core.utils import ...`).
+    *   **Result:** Failed. This resulted in `ImportError: attempted relative import beyond top-level package`.
