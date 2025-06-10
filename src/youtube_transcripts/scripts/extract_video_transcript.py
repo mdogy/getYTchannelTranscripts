@@ -73,6 +73,7 @@ def main() -> None:
 
         logger.info(f"Extracting transcript for: {args.video_url}")
         # Pass the deduplication flag to the extractor.
+        logger.info(f"Extracting transcript for: {args.video_url}")
         video_info, segments = extractor.extract(
             args.video_url, deduplicate=should_deduplicate
         )

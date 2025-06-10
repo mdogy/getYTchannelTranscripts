@@ -15,7 +15,7 @@ def _create_ydl_opts(
     ydl_opts: Dict[str, Any] = {
         "quiet": True,
         "ignoreerrors": True,
-        "extract_flat": "in_playlist",
+        "extract_flat": False,
         "skip_download": True,
         "sleep_interval": 2,
         "playlistreverse": True,

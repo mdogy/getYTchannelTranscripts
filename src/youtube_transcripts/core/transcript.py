@@ -19,7 +19,10 @@ class TranscriptExtractor:
         """Initialize the transcript extractor."""
         self.temp_dir = temp_dir
         os.makedirs(self.temp_dir, exist_ok=True)
-        self._ydl = yt_dlp.YoutubeDL({"quiet": True, "skip_download": True})
+        # Add a sleep interval to be respectful to YouTube's servers
+        self._ydl = yt_dlp.YoutubeDL(
+            {"quiet": True, "skip_download": True, "sleep_interval": 2}
+        )
 
     def __del__(self) -> None:
         """Clean up temporary files when object is destroyed."""
@@ -58,6 +61,8 @@ class TranscriptExtractor:
             "--sub-format",
             "vtt",
             "--skip-download",
+            "--sleep-interval",
+            "2",
             "-o",
             output_template,
             video_url,

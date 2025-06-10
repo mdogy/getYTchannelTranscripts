@@ -36,26 +36,30 @@ def process_video_row(
     output_dir: str,
     should_deduplicate: bool,
     include_timestamps: bool,
-) -> None:
-    """Processes a single video row from the DataFrame."""
+) -> bool:
+    """
+    Processes a single video row from the DataFrame.
+    Returns True on success, False on failure.
+    """
     video_url = row.get("video_url")
     video_id = row.get("video_id")
     title = row.get("title", "untitled")
 
     if not video_url or pd.isna(video_url) or not video_id:
         logger.warning("Skipping row due to missing video URL or ID.")
-        return
+        return False
 
     logger.info(f"Processing video: {title} ({video_url})")
 
     try:
+        logger.info(f"Extracting transcript for: {title}")
         video_info, segments = extractor.extract(
             video_url, deduplicate=should_deduplicate
         )
 
         if not video_info or not segments:
             logger.error(f"No transcript could be extracted for {video_url}.")
-            return
+            return False
 
         transcript_text = formatter.format(segments, "raw", include_timestamps)
         filename = generate_unique_filename(title, video_id)
@@ -67,13 +71,15 @@ def process_video_row(
             f.write(transcript_text)
 
         logger.info(f"Transcript for '{title}' saved to {output_path}")
+        return True
 
     except Exception as e:
         logger.error(f"Failed to process video {video_url}: {e}", exc_info=True)
+        return False
 
 
-def main() -> None:
-    """Main function to process videos from a CSV file."""
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Extract transcripts for a list of videos from a CSV file."
     )
@@ -104,9 +110,16 @@ def main() -> None:
         default="var/logs/app.log",
         help="Log file path (default: var/logs/app.log).",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Restart the process from the beginning, ignoring any saved state.",
+    )
+    return parser.parse_args()
 
-    # --- Setup Directories and Logging ---
+
+def _setup_environment(args: argparse.Namespace) -> str:
+    """Set up directories and logging, and return the output directory."""
     if args.output_dir:
         output_dir = args.output_dir
     else:
@@ -119,23 +132,61 @@ def main() -> None:
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
     setup_logging(args.log)
+    return output_dir
+
+
+def _load_processed_ids(state_file: str, restart: bool) -> set:
+    """Load the set of processed video IDs from the state file."""
+    if restart and os.path.exists(state_file):
+        os.remove(state_file)
+        logger.info("Restarting process, removed existing state file.")
+        return set()
+
+    if not restart and os.path.exists(state_file):
+        with open(state_file, "r") as f:
+            processed_ids = set(pd.read_json(f, typ="series").tolist())
+        logger.info(f"Resuming process, found {len(processed_ids)} completed videos.")
+        return processed_ids
+
+    return set()
+
+
+def main() -> None:
+    """Main function to process videos from a CSV file."""
+    args = _parse_args()
+    output_dir = _setup_environment(args)
 
     try:
         df = pd.read_csv(args.csv_file)
-        logger.info(f"Loaded {len(df)} videos from {args.csv_file}")
+        total_videos = len(df)
+        logger.info(f"Loaded {total_videos} videos from {args.csv_file}")
+
+        state_file = os.path.join(output_dir, ".progress.json")
+        processed_ids = _load_processed_ids(state_file, args.restart)
 
         extractor = TranscriptExtractor()
         formatter = TranscriptFormatter()
 
-        for _, row in df.iterrows():
-            process_video_row(
+        for index, row in df.iterrows():
+            video_id = row.get("video_id")
+            if video_id in processed_ids:
+                logger.info(f"Skipping already processed video: {video_id}")
+                continue
+
+            if process_video_row(
                 row,
                 extractor,
                 formatter,
                 output_dir,
                 not args.no_dedupe,
                 args.timestamps,
-            )
+            ):
+                processed_ids.add(video_id)
+                with open(state_file, "w") as f:
+                    pd.Series(list(processed_ids)).to_json(f)
+
+            progress = (index + 1) / total_videos * 100
+            logger.info(f"Progress: {index + 1}/{total_videos} ({progress:.2f}%)")
 
         logger.info("Finished processing all videos.")
 
