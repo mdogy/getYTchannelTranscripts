@@ -301,3 +301,6 @@ output/*.csv
 htmlcov/
 .coverage
 coverage.xml
+
+# Environment variables
+.env

@@ -42,7 +42,17 @@ A Python tool to extract video metadata from YouTube channels and auto-generated
     pip install -e .
     ```
 
-4.  **(Optional) Install development dependencies:**
+4.  **Set up your environment variables:**
+    Create a `.env` file in the root of the project by copying the example file:
+    ```bash
+    cp .env.example .env
+    ```
+    Open the `.env` file and add your Google API key:
+    ```
+    GOOGLE_API_KEY="YOUR_API_KEY_HERE"
+    ```
+
+5.  **(Optional) Install development dependencies:**
     If you plan to run tests or contribute to the code, install the development dependencies.
     ```bash
     pip install -e ".[dev]"
@@ -124,6 +134,25 @@ process-videos-from-csv \
   --csv-file "output/mrbeast_videos.csv" \
   --output-dir "transcripts/mrbeast" \
   --timestamps
+```
+
+### 4. Summarizing Video Transcripts
+
+The `summarize-videos` script processes a CSV file of video metadata, reads the corresponding transcripts, and uses Google's Gemini API to generate a summary for each.
+
+**Prerequisites:**
+- You must have a `config.yaml` file with your desired LLM settings. An example is provided in the root directory.
+- You must have a prompt template file. An example is provided at `prompts/summarize_transcript_prompt.md`.
+
+**Basic usage:**
+```bash
+python scripts/summarize_videos.py \
+    --csv-path ./transcripts/channel_videos_data.csv \
+    --transcripts-dir ./transcripts/raw_transcripts \
+    --output-dir ./transcripts/video_summaries \
+    --prompt-path ./prompts/summarize_transcript_prompt.md \
+    --config-path ./config.yaml \
+    --limit 10
 ```
 
 ## Development
