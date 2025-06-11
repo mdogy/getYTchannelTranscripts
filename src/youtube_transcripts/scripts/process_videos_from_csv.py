@@ -9,8 +9,8 @@ import sys
 import argparse
 import logging
 import pandas as pd
-from ..core.transcript import TranscriptExtractor, TranscriptFormatter
-from ..core.utils import (
+from youtube_transcripts.core.transcript import TranscriptExtractor, TranscriptFormatter
+from youtube_transcripts.core.utils import (
     setup_logging,
     generate_unique_filename,
 )
@@ -41,7 +41,6 @@ def process_video_row(
     logger.info(f"Processing video: {title} ({video_url})")
 
     try:
-        logger.info(f"Extracting transcript for: {title}")
         video_info, segments = extractor.extract(
             video_url, deduplicate=should_deduplicate
         )

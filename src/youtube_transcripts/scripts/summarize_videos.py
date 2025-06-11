@@ -6,7 +6,7 @@ import pandas as pd
 import yaml
 from dotenv import load_dotenv
 import google.generativeai as genai
-from ..core.utils import generate_unique_filename
+from youtube_transcripts.core.utils import generate_unique_filename
 
 # --- Basic Setup ---
 logging.basicConfig(

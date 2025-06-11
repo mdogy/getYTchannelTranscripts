@@ -1,14 +1,20 @@
 from setuptools import setup, find_packages
+from os import path
+
+# It's better practice to read the README file this way
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
 
 setup(
     name="youtube_transcripts",
     version="0.1.0",
     description="A tool to extract video metadata and transcripts from YouTube.",
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
-    author="Your Name",
-    author_email="your.email@example.com",
-    url="https://github.com/yourusername/getYTchannelTranscripts",
+    author="Michael Grossberg",
+    author_email="mgrossberg@ccny.cuny.edu",
+    url="https://www.ccny.cuny.edu/profiles/michael-grossberg",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     python_requires=">=3.8",

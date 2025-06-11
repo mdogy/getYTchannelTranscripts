@@ -6,8 +6,8 @@ import sys
 import argparse
 import logging
 import re
-from ..core.transcript import TranscriptExtractor, TranscriptFormatter
-from ..core.utils import setup_logging
+from youtube_transcripts.core.transcript import TranscriptExtractor, TranscriptFormatter
+from youtube_transcripts.core.utils import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,6 @@ def main() -> None:
 
         logger.info(f"Extracting transcript for: {args.video_url}")
         # Pass the deduplication flag to the extractor.
-        logger.info(f"Extracting transcript for: {args.video_url}")
         video_info, segments = extractor.extract(
             args.video_url, deduplicate=should_deduplicate
         )
