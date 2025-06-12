@@ -8,7 +8,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name="youtube_transcripts",
-    version="0.1.0",
+    version="0.1.1",
     description="A tool to extract video metadata and transcripts from YouTube.",
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -51,3 +51,4 @@ setup(
         "Operating System :: OS Independent",
     ],
 )
+# This setup script is designed to package the youtube_transcripts module
